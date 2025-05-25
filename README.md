@@ -68,9 +68,6 @@ You can configure the deletion settings in the delete.yml file with the followin
 | repo                    | Optional<br />可选项   | Set the `<owner>/<repo>` for the execution operation, the default is the `current repository`.<br />设置执行操作的 `<owner>/<repo>` ，默认为`当前仓库`。 |
 | gh_token                | `Required`<br />`必选项` | Set the [GITHUB_TOKEN](https://docs.github.com/en/actions/security-guides/automatic-token-authentication) password for executing the delete operation.<br />设置执行删除操作的 [GITHUB_TOKEN](https://docs.github.com/zh/actions/security-guides/automatic-token-authentication#about-the-github_token-secret) 口令。 |
 
-- Each run can delete up to 1000 Releases and 1000 Workflow run logs. If there are more records, the delete operation needs to be run multiple times.
-- 每次运行可以删除 1000 个 Releases 和 1000 个 Workflows 运行记录，如有更多记录，需要多次运行删除操作。
-
 ## Links / 链接
 
 - [GitHub Docs](https://docs.github.com/en/rest/releases/releases?list-releases)
