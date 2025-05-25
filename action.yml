@@ -111,11 +111,15 @@ runs:
         [[ -n "${max_releases_fetch}" ]] && make_command+=("-R" "${max_releases_fetch}")
         [[ -n "${max_workflows_fetch}" ]] && make_command+=("-W" "${max_workflows_fetch}")
         
+        # 确保 del.sh 文件存在
+        if [[ ! -f "del.sh" ]]; then
+          echo "Error: del.sh file not found in the current directory."
+          exit 1
+        fi
+        
+        # 设置 del.sh 可执行权限
+        chmod +x del.sh
+        
         # 执行脚本
         echo "==> Executing deletion script with options: ${make_command[*]}"
-        chmod +x del.sh
         ./del.sh "${make_command[@]}"
-
-branding:
-  icon: "terminal"
-  color: "gray-dark"
