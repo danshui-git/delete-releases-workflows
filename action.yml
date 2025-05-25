@@ -58,8 +58,8 @@ runs:
   steps:
     - shell: bash
       run: |
-        cd ${{ github.action_path }}
-        echo -e "Current Actions path: ${PWD}"
+        # Use GITHUB_WORKSPACE to get the current workspace directory
+        echo -e "Current Actions path: ${GITHUB_WORKSPACE}"
         echo -e "Current workflow run_id: ${GITHUB_RUN_ID}"
 
         gh_token="${{ inputs.gh_token }}"
@@ -97,8 +97,16 @@ runs:
         [[ -n "${gh_token}" ]] && make_command="${make_command} -g ${gh_token}"
         [[ -n "${max_releases_fetch}" ]] && make_command="${make_command} -R ${max_releases_fetch}"
         [[ -n "${max_workflows_fetch}" ]] && make_command="${make_command} -W ${max_workflows_fetch}"
-        chmod +x del.sh
-        ./del.sh ${make_command}
+
+        # Ensure the script file exists
+        if [[ ! -f "${GITHUB_WORKSPACE}/del.sh" ]]; then
+          echo -e "Error: del.sh file not found in the current directory."
+          exit 1
+        fi
+
+        # Make the script executable and run it
+        chmod +x "${GITHUB_WORKSPACE}/del.sh"
+        "${GITHUB_WORKSPACE}/del.sh" ${make_command}
 
 branding:
   icon: "terminal"
