@@ -445,12 +445,12 @@ out_workflows_list() {
     # Generate a keep list of workflows
     keep_workflows_list="json_keep_workflows_list"
     if [[ -s "${all_workflows_list}" ]]; then
-        if [[ "${workflows_keep_day}" -eq "0" ]]; then
+        if [[ "${workflows_keep_latest}" -eq "0" ]]; then
             echo -e "${INFO} (2.5.1) Delete all workflows runs."
         else
             # Sort workflows by date and keep the latest ones
             cat ${all_workflows_list} | jq -s 'sort_by(.date | fromdateiso8601) | reverse' >${keep_workflows_list}
-            head -n ${workflows_keep_day} ${keep_workflows_list} >${keep_workflows_list}.tmp
+            head -n ${workflows_keep_latest} ${keep_workflows_list} >${keep_workflows_list}.tmp
             mv ${keep_workflows_list}.tmp ${keep_workflows_list}
 
             echo -e "${INFO} (2.5.2) The keep workflows runs list is generated successfully."
@@ -459,7 +459,7 @@ out_workflows_list() {
             }
 
             # Remove workflows that need to be kept from the full list
-            sed -i "1,${workflows_keep_day}d" ${all_workflows_list}
+            sed -i "1,${workflows_keep_latest}d" ${all_workflows_list}
         fi
     else
         echo -e "${NOTE} (2.5.4) The workflows runs list is empty. skip."
