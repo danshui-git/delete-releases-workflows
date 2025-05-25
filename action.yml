@@ -59,14 +59,7 @@ runs:
     - shell: bash
       run: |
         # Use GITHUB_WORKSPACE to get the current workspace directory
-        echo -e "Current Actions path: ${GITHUB_WORKSPACE}"
-        echo -e "Current workflow run_id: ${GITHUB_RUN_ID}"
-
-        # Use GITHUB_ACTION_PATH to get the current action path
-        echo -e "Current Action path: ${GITHUB_ACTION_PATH}"
-
-        # Change to the action directory
-        cd "${GITHUB_ACTION_PATH}"
+        cd "${{ github.action_path }}"
         echo -e "Changed to directory: $(pwd)"
 
         gh_token="${{ inputs.gh_token }}"
