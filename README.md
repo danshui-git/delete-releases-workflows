@@ -68,13 +68,6 @@ You can configure the deletion settings in the delete.yml file with the followin
 | repo                    | Optional<br />可选项   | Set the `<owner>/<repo>` for the execution operation, the default is the `current repository`.<br />设置执行操作的 `<owner>/<repo>` ，默认为`当前仓库`。 |
 | gh_token                | `Required`<br />`必选项` | Set the [GITHUB_TOKEN](https://docs.github.com/en/actions/security-guides/automatic-token-authentication) password for executing the delete operation.<br />设置执行删除操作的 [GITHUB_TOKEN](https://docs.github.com/zh/actions/security-guides/automatic-token-authentication#about-the-github_token-secret) 口令。 |
 
-## Links / 链接
-
-- [GitHub Docs](https://docs.github.com/en/rest/releases/releases?list-releases)
-- [unifreq/openwrt_packit](https://github.com/unifreq/openwrt_packit)
-- [amlogic-s9xxx-armbian](https://github.com/ophub/amlogic-s9xxx-armbian)
-- [amlogic-s9xxx-openwrt](https://github.com/ophub/amlogic-s9xxx-openwrt)
-- [flippy-openwrt-actions](https://github.com/ophub/flippy-openwrt-actions)
 
 ## License / 许可
 
