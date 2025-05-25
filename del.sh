@@ -1,528 +1,491 @@
 #!/usr/bin/env bash
 
-# Set default value
+# ------------------------------
+# 全局变量定义
+# ------------------------------
+set -euo pipefail
+IFS=$'\n\t'
+
+# 默认参数
 delete_releases="false"
 delete_tags="false"
 prerelease_option="all"
-releases_keep_latest="90"
+releases_keep_latest=90
 releases_keep_keyword=()
 delete_workflows="false"
-workflows_keep_day="90"
+workflows_keep_latest=0
+workflows_keep_day=90
 workflows_keep_keyword=()
 out_log="false"
+repo=""
+gh_token=""
+max_releases_fetch=100
+max_workflows_fetch=100
 
-# Set the API to return 100 results per page
-github_per_page="100"
-# Set the maximum limit for API queries to 100 pages
-github_max_page="100"
+# 常量
+GITHUB_API="https://api.github.com"
+PER_PAGE=100
+MAX_PAGE=100
+TIMEOUT=30
 
-# Set font color
-STEPS="[\033[95m STEPS \033[0m]"
-INFO="[\033[94m INFO \033[0m]"
-NOTE="[\033[93m NOTE \033[0m]"
-ERROR="[\033[91m ERROR \033[0m]"
-SUCCESS="[\033[92m SUCCESS \033[0m]"
-#
-#==============================================================================================
+# 颜色定义
+COLOR_RESET="\033[0m"
+COLOR_RED="\033[31m"
+COLOR_GREEN="\033[32m"
+COLOR_YELLOW="\033[33m"
+COLOR_BLUE="\033[34m"
+COLOR_PURPLE="\033[35m"
+COLOR_CYAN="\033[36m"
 
-error_msg() {
-    echo -e "${ERROR} ${1}"
-    exit 1
+# 日志函数
+log() {
+  local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+  case "$1" in
+    "INFO")    echo -e "${COLOR_BLUE}[${timestamp}] [INFO]    $2${COLOR_RESET}" ;;
+    "NOTE")    echo -e "${COLOR_YELLOW}[${timestamp}] [NOTE]    $2${COLOR_RESET}" ;;
+    "SUCCESS") echo -e "${COLOR_GREEN}[${timestamp}] [SUCCESS] $2${COLOR_RESET}" ;;
+    "ERROR")   echo -e "${COLOR_RED}[${timestamp}] [ERROR]   $2${COLOR_RESET}" >&2; exit 1 ;;
+  esac
 }
 
+# 临时文件清理
+cleanup() {
+  local files=("${all_releases_list}" "${all_workflows_list}" "${keep_releases_keyword_list}" "${keep_releases_list}" "${keep_keyword_workflows_list}" "${all_workflows_date_list}" "${keep_workflows_list}" "${tmp_josn_file}")
+  for file in "${files[@]}"; do
+    [[ -f "$file" ]] && rm -f "$file"
+  done
+}
+trap cleanup EXIT
+
+# ------------------------------
+# 参数校验函数
+# ------------------------------
+validate_boolean() {
+  if [[ ! "$1" =~ ^(true|false)$ ]]; then
+    log "ERROR" "Invalid boolean value: $1 (expected true/false)"
+  fi
+}
+
+validate_integer() {
+  if [[ ! "$1" =~ ^[0-9]+$ || "$1" -lt 0 ]]; then
+    log "ERROR" "Invalid integer value: $1 (expected non-negative integer)"
+  fi
+}
+
+# ------------------------------
+# 初始化参数
+# ------------------------------
 init_var() {
-    echo -e "${STEPS} Start Initializing Variables..."
+  log "INFO" "Initializing parameters..."
 
-    # Install the necessary dependent packages
-    sudo apt-get -qq update && sudo apt-get -qq install -y jq curl
+  # 安装依赖
+  if ! command -v jq &> /dev/null; then
+    log "INFO" "Installing jq..."
+    sudo apt-get -qq update && sudo apt-get -qq install jq || log "ERROR" "Failed to install jq"
+  fi
 
-    # If it is followed by [ : ], it means that the option requires a parameter value
-    get_all_ver="$(getopt "r:a:t:p:l:w:s:d:k:o:g:" "${@}")"
+  # 解析命令行参数
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -r|--repo)            repo="$2"; shift 2 ;;
+      -a|--delete_releases) delete_releases="$2"; validate_boolean "$2"; shift 2 ;;
+      -t|--delete_tags)     delete_tags="$2"; validate_boolean "$2"; shift 2 ;;
+      -p|--prerelease_option) prerelease_option="$2"; shift 2 ;;
+      -l|--releases_keep_latest) releases_keep_latest="$2"; validate_integer "$2"; shift 2 ;;
+      -w|--releases_keep_keyword) IFS='/' read -r -a releases_keep_keyword <<< "$2"; shift 2 ;;
+      -s|--delete_workflows) delete_workflows="$2"; validate_boolean "$2"; shift 2 ;;
+      -L|--workflows_keep_latest) workflows_keep_latest="$2"; validate_integer "$2"; shift 2 ;;
+      -d|--workflows_keep_day) workflows_keep_day="$2"; validate_integer "$2"; shift 2 ;;
+      -k|--workflows_keep_keyword) IFS='/' read -r -a workflows_keep_keyword <<< "$2"; shift 2 ;;
+      -o|--out_log)         out_log="$2"; validate_boolean "$2"; shift 2 ;;
+      -g|--gh_token)        gh_token="$2"; shift 2 ;;
+      -R|--max_releases_fetch) max_releases_fetch="$2"; validate_integer "$2"; shift 2 ;;
+      -W|--max_workflows_fetch) max_workflows_fetch="$2"; validate_integer "$2"; shift 2 ;;
+      *) log "ERROR" "Unknown option: $1" ;;
+    esac
+  done
 
-    while [[ -n "${1}" ]]; do
-        case "${1}" in
-        -r | --repo)
-            if [[ -n "${2}" ]]; then
-                repo="${2}"
-                shift
-            else
-                error_msg "Invalid -r parameter [ ${2} ]!"
-            fi
-            ;;
-        -a | --delete_releases)
-            if [[ -n "${2}" ]]; then
-                delete_releases="${2}"
-                shift
-            else
-                error_msg "Invalid -a parameter [ ${2} ]!"
-            fi
-            ;;
-        -t | --delete_tags)
-            if [[ -n "${2}" ]]; then
-                delete_tags="${2}"
-                shift
-            else
-                error_msg "Invalid -t parameter [ ${2} ]!"
-            fi
-            ;;
-        -p | --prerelease_option)
-            if [[ -n "${2}" ]]; then
-                prerelease_option="${2}"
-                shift
-            else
-                error_msg "Invalid -p parameter [ ${2} ]!"
-            fi
-            ;;
-        -l | --releases_keep_latest)
-            if [[ -n "${2}" ]]; then
-                releases_keep_latest="${2}"
-                shift
-            else
-                error_msg "Invalid -l parameter [ ${2} ]!"
-            fi
-            ;;
-        -w | --releases_keep_keyword)
-            if [[ -n "${2}" ]]; then
-                oldIFS="${IFS}"
-                IFS="/"
-                releases_keep_keyword=(${2})
-                IFS="${oldIFS}"
-                shift
-            else
-                error_msg "Invalid -w parameter [ ${2} ]!"
-            fi
-            ;;
-        -s | --delete_workflows)
-            if [[ -n "${2}" ]]; then
-                delete_workflows="${2}"
-                shift
-            else
-                error_msg "Invalid -s parameter [ ${2} ]!"
-            fi
-            ;;
-        -d | --workflows_keep_day)
-            if [[ -n "${2}" ]]; then
-                workflows_keep_day="${2}"
-                shift
-            else
-                error_msg "Invalid -d parameter [ ${2} ]!"
-            fi
-            ;;
-        -k | --workflows_keep_keyword)
-            if [[ -n "${2}" ]]; then
-                oldIFS="${IFS}"
-                IFS="/"
-                workflows_keep_keyword=(${2})
-                IFS="${oldIFS}"
-                shift
-            else
-                error_msg "Invalid -k parameter [ ${2} ]!"
-            fi
-            ;;
-        -o | --out_log)
-            if [[ -n "${2}" ]]; then
-                out_log="${2}"
-                shift
-            else
-                error_msg "Invalid -o parameter [ ${2} ]!"
-            fi
-            ;;
-        -g | --gh_token)
-            if [[ -n "${2}" ]]; then
-                gh_token="${2}"
-                shift
-            else
-                error_msg "Invalid -g parameter [ ${2} ]!"
-            fi
-            ;;
-        *)
-            error_msg "Invalid option [ ${1} ]!"
-            ;;
-        esac
-        shift
-    done
+  # 验证必要参数
+  [[ -z "$gh_token" ]] && log "ERROR" "GitHub token (gh_token) is required"
+  [[ -z "$repo" ]] && repo="${GITHUB_REPOSITORY:-}"
+  [[ -z "$repo" ]] && log "ERROR" "Repository name (repo) is required"
 
-    echo -e "${INFO} repo: [ ${repo} ]"
-    echo -e "${INFO} delete_releases: [ ${delete_releases} ]"
-    echo -e "${INFO} delete_tags: [ ${delete_tags} ]"
-    echo -e "${INFO} prerelease_option: [ ${prerelease_option} ]"
-    echo -e "${INFO} releases_keep_latest: [ ${releases_keep_latest} ]"
-    echo -e "${INFO} releases_keep_keyword: [ $(echo ${releases_keep_keyword[@]} | xargs) ]"
-    echo -e "${INFO} delete_workflows: [ ${delete_workflows} ]"
-    echo -e "${INFO} workflows_keep_day: [ ${workflows_keep_day} ]"
-    echo -e "${INFO} workflows_keep_keyword: [ $(echo ${workflows_keep_keyword[@]} | xargs) ]"
-    echo -e "${INFO} out_log: [ ${out_log} ]"
-    echo -e ""
+  # 日志输出参数
+  log "INFO" "Configuration:"
+  log "INFO" "  repo: $repo"
+  log "INFO" "  delete_releases: $delete_releases"
+  log "INFO" "  delete_tags: $delete_tags"
+  log "INFO" "  prerelease_option: $prerelease_option"
+  log "INFO" "  releases_keep_latest: $releases_keep_latest"
+  log "INFO" "  releases_keep_keyword: ${releases_keep_keyword[*]}"
+  log "INFO" "  delete_workflows: $delete_workflows"
+  log "INFO" "  workflows_keep_latest: $workflows_keep_latest"
+  log "INFO" "  workflows_keep_day: $workflows_keep_day"
+  log "INFO" "  workflows_keep_keyword: ${workflows_keep_keyword[*]}"
+  log "INFO" "  max_releases_fetch: $max_releases_fetch"
+  log "INFO" "  max_workflows_fetch: $max_workflows_fetch"
+  log "INFO" "  out_log: $out_log"
 }
 
+# ------------------------------
+# GitHub API 请求函数
+# ------------------------------
+api_request() {
+  local method="$1"
+  local endpoint="$2"
+  local params="${3:-}"
+  local output_file="${4:-}"
+  
+  local url="${GITHUB_API}/${endpoint}"
+  [[ -n "$params" ]] && url="${url}?${params}"
+  
+  log "INFO" "API Request: ${method} ${url}"
+  
+  local response
+  response=$(curl -sSL -w "\n%{http_code}" \
+    -H "Accept: application/vnd.github+json" \
+    -H "Authorization: Bearer ${gh_token}" \
+    -H "X-GitHub-Api-Version: 2022-11-28" \
+    -X "$method" \
+    "$url")
+  
+  local status_code=$(echo "$response" | tail -n1)
+  local body=$(echo "$response" | head -n -1)
+  
+  if [[ "$status_code" -lt 200 || "$status_code" -ge 300 ]]; then
+    log "ERROR" "API request failed (${status_code}): ${body}"
+  fi
+  
+  [[ -n "$output_file" ]] && echo "$body" > "$output_file"
+  echo "$body"
+}
+
+# ------------------------------
+# Releases 处理函数
+# ------------------------------
 get_releases_list() {
-    echo -e "${STEPS} Start querying the releases list..."
-
-    # Set github API default page
-    github_page="1"
-
-    # Create a file to store the results
-    all_releases_list="josn_api_releases"
-    echo "" >${all_releases_list}
-
-    # Get the release list
-    while true; do
-        response="$(
-            curl -s -L \
-                -H "Accept: application/vnd.github+json" \
-                -H "Authorization: Bearer ${gh_token}" \
-                -H "X-GitHub-Api-Version: 2022-11-28" \
-                "https://api.github.com/repos/${repo}/releases?per_page=${github_per_page}&page=${github_page}"
-        )"
-
-        # Check if the response is empty or an error occurred
-        if [[ -z "${response}" ]] || [[ "${response}" == *"Not Found"* ]]; then
-            break
-        else
-            # Get the number of results returned by the current page
-            get_results_length="$(echo "${response}" | jq '. | length')"
-            echo -e "${INFO} (1.1.${github_page}) Query the [ ${github_page}th ] page and return [ ${get_results_length} ] results."
-
-            # Sort the results
-            echo "${response}" |
-                jq -s '.[] | sort_by(.published_at)|reverse' |
-                jq -c '.[] | {date: .published_at, id: .id, prerelease: .prerelease, tag_name: .tag_name}' \
-                    >>${all_releases_list}
-        fi
-
-        # Check if the current page has fewer results than the per_page limit
-        if [[ "${get_results_length}" -lt "${github_per_page}" ]]; then
-            break
-        fi
-
-        # Check if the current page is greater than the maximum page
-        if [[ "${github_page}" -ge "${github_max_page}" ]]; then
-            echo -e "${NOTE} (1.2.1) Reach the maximum page number (${github_max_page}) in the query. skip."
-            break
-        else
-            github_page="$((github_page + 1))"
-        fi
-    done
-
-    if [[ -s "${all_releases_list}" ]]; then
-        # Remove empty lines
-        sed -i '/^[[:space:]]*$/d' "${all_releases_list}"
-
-        # Print the result log
-        echo -e "${INFO} (1.3.1) The api.github.com for releases request successfully."
-        [[ "${out_log}" == "true" ]] && {
-            echo -e "${INFO} (1.3.2) Count of releases list: [ $(cat ${all_releases_list} | wc -l) ]"
-            echo -e "${INFO} (1.3.3) All releases list:\n$(cat ${all_releases_list})"
-        }
-    else
-        echo -e "${NOTE} (1.3.4) The releases list is empty. skip."
+  log "INFO" "Fetching releases list (max: $max_releases_fetch)..."
+  
+  all_releases_list=$(mktemp)
+  page=1
+  total_fetched=0
+  
+  while [[ $page -le $MAX_PAGE && $total_fetched -lt $max_releases_fetch ]]; do
+    # 计算本次请求最多获取的数量
+    remaining=$((max_releases_fetch - total_fetched))
+    per_page=$((remaining < PER_PAGE ? remaining : PER_PAGE))
+    
+    response=$(api_request "GET" "repos/${repo}/releases" "per_page=${per_page}&page=${page}")
+    count=$(echo "$response" | jq 'length')
+    
+    if [[ "$count" -eq 0 ]]; then
+      break
     fi
+    
+    log "INFO" "Fetched ${count} releases from page ${page}"
+    
+    # 提取需要的字段并追加到结果文件
+    echo "$response" | jq -c '.[] | {date: .published_at, id: .id, prerelease: .prerelease, tag_name: .tag_name}' >> "$all_releases_list"
+    
+    total_fetched=$((total_fetched + count))
+    
+    if [[ "$count" -lt "$per_page" ]]; then
+      break
+    fi
+    
+    page=$((page + 1))
+  done
+  
+  if [[ -s "$all_releases_list" ]]; then
+    log "INFO" "Total releases fetched: $(wc -l < "$all_releases_list")"
+    [[ "$out_log" == "true" ]] && log "INFO" "Releases list:\n$(cat "$all_releases_list")"
+  else
+    log "NOTE" "No releases found"
+  fi
 }
 
 out_releases_list() {
-    echo -e "${STEPS} Start outputting the releases list..."
-
-    if [[ -s "${all_releases_list}" ]]; then
-        # Filter based on the prerelease option(all/false/true)
-        if [[ "${prerelease_option}" == "all" ]]; then
-            echo -e "${NOTE} (1.4.1) Do not filter the prerelease option. skip."
-        elif [[ "${prerelease_option}" == "false" ]]; then
-            echo -e "${INFO} (1.4.2) Filter the prerelease option: [ false ]"
-            cat ${all_releases_list} | jq -r '.prerelease' | grep -w "true" | while read line; do sed -i "/${line}/d" ${all_releases_list}; done
-        elif [[ "${prerelease_option}" == "true" ]]; then
-            echo -e "${INFO} (1.4.3) Filter the prerelease option: [ true ]"
-            cat ${all_releases_list} | jq -r '.prerelease' | grep -w "false" | while read line; do sed -i "/${line}/d" ${all_releases_list}; done
-        else
-            error_msg "Invalid prerelease option [ ${prerelease_option} ]!"
-        fi
-        [[ "${out_log}" == "true" ]] && echo -e "${INFO} (1.4.4) Current releases list:\n$(cat ${all_releases_list})"
-    else
-        echo -e "${NOTE} (1.4.5) The releases list is empty. skip."
+  log "INFO" "Processing releases list..."
+  
+  if [[ ! -s "$all_releases_list" ]]; then
+    log "NOTE" "Releases list is empty, skipping"
+    return
+  fi
+  
+  # 基于prerelease选项过滤
+  case "$prerelease_option" in
+    "all")
+      log "INFO" "Keeping all releases (prerelease option: all)"
+      ;;
+    "only")
+      log "INFO" "Filtering for prereleases only"
+      jq -c 'select(.prerelease == true)' "$all_releases_list" > "${all_releases_list}.filtered"
+      mv "${all_releases_list}.filtered" "$all_releases_list"
+      ;;
+    "exclude")
+      log "INFO" "Excluding prereleases"
+      jq -c 'select(.prerelease == false)' "$all_releases_list" > "${all_releases_list}.filtered"
+      mv "${all_releases_list}.filtered" "$all_releases_list"
+      ;;
+    *)
+      log "ERROR" "Invalid prerelease option: $prerelease_option"
+      ;;
+  esac
+  
+  # 基于关键词过滤
+  keep_releases_keyword_list=$(mktemp)
+  if [[ ${#releases_keep_keyword[@]} -gt 0 ]]; then
+    log "INFO" "Filtering releases by keywords: ${releases_keep_keyword[*]}"
+    
+    for keyword in "${releases_keep_keyword[@]}"; do
+      jq -c --arg kw "$keyword" 'select(.tag_name | contains($kw))' "$all_releases_list" >> "$keep_releases_keyword_list"
+    done
+    
+    if [[ -s "$keep_releases_keyword_list" ]]; then
+      log "INFO" "Found $(wc -l < "$keep_releases_keyword_list") releases to keep by keyword"
+      
+      # 从待删除列表中移除需要保留的
+      comm -23 <(sort "$all_releases_list") <(sort "$keep_releases_keyword_list") > "${all_releases_list}.filtered"
+      mv "${all_releases_list}.filtered" "$all_releases_list"
     fi
-
-    # Match tags that need to be filtered
-    keep_releases_keyword_list="josn_keep_releases_keyword_list"
-    if [[ "${#releases_keep_keyword[@]}" -ge "1" && -s "${all_releases_list}" ]]; then
-        # Match tags that meet the criteria
-        echo -e "${INFO} (1.5.1) Filter tags keywords: [ $(echo ${releases_keep_keyword[@]} | xargs) ]"
-        for ((i = 0; i < ${#releases_keep_keyword[@]}; i++)); do
-            cat ${all_releases_list} | jq -r .tag_name | grep -E "${releases_keep_keyword[$i]}" >>${keep_releases_keyword_list}
-        done
-        [[ "${out_log}" == "true" && -s "${keep_releases_keyword_list}" ]] && {
-            echo -e "${INFO} (1.5.2) List of tags that meet the criteria:\n$(cat ${keep_releases_keyword_list})"
-        }
-
-        # Remove the tags that need to be kept
-        [[ -s "${keep_releases_keyword_list}" ]] && {
-            cat ${keep_releases_keyword_list} | while read line; do sed -i "/${line}/d" ${all_releases_list}; done
-            echo -e "${INFO} (1.5.3) The tags keywords filtering successfully."
-        }
-
-        # List of remaining tags after filtering.
-        [[ "${out_log}" == "true" ]] && echo -e "${INFO} (1.5.4) Current releases list:\n$(cat ${all_releases_list})"
-    else
-        echo -e "${NOTE} (1.5.5) The filter keyword is empty. skip."
-    fi
-
-    # Match the latest tags that need to be kept
-    keep_releases_list="josn_keep_releases_list"
-    if [[ -s "${all_releases_list}" ]]; then
-        if [[ "${releases_keep_latest}" -eq "0" ]]; then
-            echo -e "${INFO} (1.6.1) Delete all releases."
-        else
-            # Generate a list of tags that need to be kept
-            cat ${all_releases_list} | head -n ${releases_keep_latest} >${keep_releases_list}
-            echo -e "${INFO} (1.6.2) The keep tags list is generated successfully."
-            [[ "${out_log}" == "true" && -s "${keep_releases_list}" ]] && {
-                echo -e "${INFO} (1.6.3) The keep tags list:\n$(cat ${keep_releases_list})"
-            }
-
-            # Remove releases that need to be kept from the full list
-            sed -i "1,${releases_keep_latest}d" ${all_releases_list}
-        fi
-    else
-        echo -e "${NOTE} (1.6.4) The releases list is empty. skip."
-    fi
-
-    # Delete list
-    if [[ -s "${all_releases_list}" ]]; then
-        [[ "${out_log}" == "true" ]] && echo -e "${INFO} (1.6.5) Delete releases list:\n$(cat ${all_releases_list})"
-    else
-        echo -e "${NOTE} (1.6.6) The delete releases list is empty. skip."
-    fi
-
-    echo -e ""
+  fi
+  
+  # 按日期排序并保留最新的N个
+  keep_releases_list=$(mktemp)
+  if [[ -s "$all_releases_list" && "$releases_keep_latest" -gt 0 ]]; then
+    log "INFO" "Sorting releases by date and keeping latest $releases_keep_latest"
+    
+    # 按日期排序（最新的在前）
+    jq -s 'sort_by(.date) | reverse' "$all_releases_list" > "${all_releases_list}.sorted"
+    
+    # 保留最新的N个
+    head -n "$releases_keep_latest" "${all_releases_list}.sorted" > "$keep_releases_list"
+    
+    # 剩下的是要删除的
+    tail -n +$((releases_keep_latest + 1)) "${all_releases_list}.sorted" > "$all_releases_list"
+    
+    log "INFO" "Will keep $releases_keep_latest releases, delete $(wc -l < "$all_releases_list")"
+    [[ "$out_log" == "true" ]] && log "INFO" "Releases to delete:\n$(cat "$all_releases_list")"
+  fi
 }
 
 del_releases_file() {
-    echo -e "${STEPS} Start deleting releases files..."
-
-    # Delete releases
-    if [[ -s "${all_releases_list}" && -n "$(cat ${all_releases_list} | jq -r .id)" ]]; then
-        cat ${all_releases_list} | jq -r .id | while read release_id; do
-            {
-                curl -s \
-                    -X DELETE \
-                    -H "Accept: application/vnd.github+json" \
-                    -H "Authorization: Bearer ${gh_token}" \
-                    -H "X-GitHub-Api-Version: 2022-11-28" \
-                    https://api.github.com/repos/${repo}/releases/${release_id}
-            }
-        done
-        echo -e "${SUCCESS} (1.7.1) Releases deleted successfully."
-    else
-        echo -e "${NOTE} (1.7.2) No releases need to be deleted. skip."
-    fi
-
-    echo -e ""
+  log "INFO" "Deleting releases..."
+  
+  if [[ ! -s "$all_releases_list" ]]; then
+    log "NOTE" "No releases to delete, skipping"
+    return
+  fi
+  
+  local count=0
+  while IFS= read -r line; do
+    release_id=$(echo "$line" | jq -r '.id')
+    tag_name=$(echo "$line" | jq -r '.tag_name')
+    
+    log "INFO" "Deleting release: $tag_name (ID: $release_id)"
+    
+    api_request "DELETE" "repos/${repo}/releases/${release_id}"
+    
+    count=$((count + 1))
+    sleep 0.5  # 避免触发API速率限制
+  done < "$all_releases_list"
+  
+  log "SUCCESS" "Deleted $count releases"
 }
 
 del_releases_tags() {
-    echo -e "${STEPS} Start deleting tags..."
-
-    # Delete the tags associated with releases
-    if [[ "${delete_tags}" == "true" && -s "${all_releases_list}" && -n "$(cat ${all_releases_list} | jq -r .tag_name)" ]]; then
-        cat ${all_releases_list} | jq -r .tag_name | while read tag_name; do
-            {
-                curl -s \
-                    -X DELETE \
-                    -H "Accept: application/vnd.github+json" \
-                    -H "Authorization: Bearer ${gh_token}" \
-                    -H "X-GitHub-Api-Version: 2022-11-28" \
-                    https://api.github.com/repos/${repo}/git/refs/tags/${tag_name}
-            }
-        done
-        echo -e "${SUCCESS} (1.8.1) Tags deleted successfully."
-    else
-        echo -e "${NOTE} (1.8.2) No tags need to be deleted. skip."
-    fi
-
-    echo -e ""
+  log "INFO" "Deleting tags..."
+  
+  if [[ "$delete_tags" != "true" || ! -s "$all_releases_list" ]]; then
+    log "NOTE" "No tags to delete, skipping"
+    return
+  fi
+  
+  local count=0
+  while IFS= read -r line; do
+    tag_name=$(echo "$line" | jq -r '.tag_name')
+    
+    log "INFO" "Deleting tag: $tag_name"
+    
+    api_request "DELETE" "repos/${repo}/git/refs/tags/${tag_name}"
+    
+    count=$((count + 1))
+    sleep 0.5  # 避免触发API速率限制
+  done < "$all_releases_list"
+  
+  log "SUCCESS" "Deleted $count tags"
 }
 
+# ------------------------------
+# Workflows 处理函数
+# ------------------------------
 get_workflows_list() {
-    echo -e "${STEPS} Start querying the workflows list..."
-
-    # Set github API default page
-    github_page="1"
-
-    # Create a file to store the results
-    all_workflows_list="josn_api_workflows"
-    echo "" >${all_workflows_list}
-
-    # Get the release list
-    while true; do
-        response="$(
-            curl -s -L \
-                -H "Accept: application/vnd.github+json" \
-                -H "Authorization: Bearer ${gh_token}" \
-                -H "X-GitHub-Api-Version: 2022-11-28" \
-                "https://api.github.com/repos/${repo}/actions/runs?per_page=${github_per_page}&page=${github_page}"
-        )"
-
-        # Check if the response is empty or an error occurred
-        if [[ -z "${response}" ]] || [[ "${response}" == *"Not Found"* ]]; then
-            break
-        else
-            # Get the number of results returned by the current page
-            get_results_length="$(echo "${response}" | jq -r '.workflow_runs | length')"
-            echo -e "(2.1.${github_page}) ${INFO} Query the [ ${github_page}th ] page and return [ ${get_results_length} ] results."
-
-            # Sort the results
-            echo "${response}" |
-                jq -c '.workflow_runs[] | select(.status != "in_progress") | {date: .updated_at, id: .id, name: .name}' \
-                    >>${all_workflows_list}
-        fi
-
-        # Check if the current page has fewer results than the per_page limit
-        if [[ "${get_results_length}" -lt "${github_per_page}" ]]; then
-            break
-        fi
-
-        # Check if the current page is greater than the maximum page
-        if [[ "${github_page}" -ge "${github_max_page}" ]]; then
-            echo -e "${NOTE} (2.2.1) Reach the maximum page number (${github_max_page}) in the query. skip."
-            break
-        else
-            github_page="$((github_page + 1))"
-        fi
-    done
-
-    if [[ -s "${all_workflows_list}" ]]; then
-        # Remove empty lines
-        sed -i '/^[[:space:]]*$/d' "${all_workflows_list}"
-
-        # Print the result log
-        echo -e "${INFO} (2.3.1) The api.github.com for workflows request successfully."
-        [[ "${out_log}" == "true" ]] && {
-            echo -e "${INFO} (2.3.2) Count of workflow runs: [ $(cat ${all_workflows_list} | wc -l) ]"
-            echo -e "${INFO} (2.3.3) All workflows runs list:\n$(cat ${all_workflows_list})"
-        }
-    else
-        echo -e "${NOTE} (2.3.4) The workflows list is empty. skip."
+  log "INFO" "Fetching workflow runs list (max: $max_workflows_fetch)..."
+  
+  all_workflows_list=$(mktemp)
+  page=1
+  total_fetched=0
+  
+  while [[ $page -le $MAX_PAGE && $total_fetched -lt $max_workflows_fetch ]]; do
+    # 计算本次请求最多获取的数量
+    remaining=$((max_workflows_fetch - total_fetched))
+    per_page=$((remaining < PER_PAGE ? remaining : PER_PAGE))
+    
+    response=$(api_request "GET" "repos/${repo}/actions/runs" "per_page=${per_page}&page=${page}")
+    count=$(echo "$response" | jq '.workflow_runs | length')
+    
+    if [[ "$count" -eq 0 ]]; then
+      break
     fi
+    
+    log "INFO" "Fetched ${count} workflow runs from page ${page}"
+    
+    # 提取需要的字段并追加到结果文件
+    echo "$response" | jq -c '.workflow_runs[] | select(.status != "in_progress") | {date: .updated_at, id: .id, name: .name}' >> "$all_workflows_list"
+    
+    total_fetched=$((total_fetched + count))
+    
+    if [[ "$count" -lt "$per_page" ]]; then
+      break
+    fi
+    
+    page=$((page + 1))
+  done
+  
+  if [[ -s "$all_workflows_list" ]]; then
+    log "INFO" "Total workflow runs fetched: $(wc -l < "$all_workflows_list")"
+    [[ "$out_log" == "true" ]] && log "INFO" "Workflow runs list:\n$(cat "$all_workflows_list")"
+  else
+    log "NOTE" "No workflow runs found"
+  fi
 }
 
 out_workflows_list() {
-    echo -e "${STEPS} Start outputting the workflows list..."
-
-    # The workflows containing keywords that need to be keep
-    keep_keyword_workflows_list="josn_keep_keyword_workflows_list"
-    # Remove workflows that match keywords and need to be kept
-    if [[ "${#workflows_keep_keyword[@]}" -ge "1" && -s "${all_workflows_list}" ]]; then
-        # Match the list of workflows that meet the keywords
-        echo -e "${INFO} (2.4.1) Filter Workflows runs keywords: [ $(echo ${workflows_keep_keyword[@]} | xargs) ]"
-        for ((i = 0; i < ${#workflows_keep_keyword[@]}; i++)); do
-            cat ${all_workflows_list} | jq -r .name | grep -E "${workflows_keep_keyword[$i]}" >>${keep_keyword_workflows_list}
-        done
-        [[ "${out_log}" == "true" && -s "${keep_keyword_workflows_list}" ]] && {
-            echo -e "${INFO} (2.4.2) List of Workflows runs that meet the criteria:\n$(cat ${keep_keyword_workflows_list})"
-        }
-
-        # Remove the workflows that need to be kept
-        [[ -s "${keep_keyword_workflows_list}" ]] && {
-            cat ${keep_keyword_workflows_list} | while read line; do sed -i "/${line}/d" ${all_workflows_list}; done
-            echo -e "${INFO} (2.4.3) The keyword filtering successfully."
-        }
-
-        # List of remaining workflows after filtering by keywords
-        [[ "${out_log}" == "true" ]] && echo -e "${INFO} (2.4.4) Current workflows runs list:\n$(cat ${all_workflows_list})"
-    else
-        echo -e "${NOTE} (2.4.5) The filter keyword is empty. skip."
+  log "INFO" "Processing workflow runs list..."
+  
+  if [[ ! -s "$all_workflows_list" ]]; then
+    log "NOTE" "Workflow runs list is empty, skipping"
+    return
+  fi
+  
+  # 基于关键词过滤
+  keep_keyword_workflows_list=$(mktemp)
+  if [[ ${#workflows_keep_keyword[@]} -gt 0 ]]; then
+    log "INFO" "Filtering workflow runs by keywords: ${workflows_keep_keyword[*]}"
+    
+    for keyword in "${workflows_keep_keyword[@]}"; do
+      jq -c --arg kw "$keyword" 'select(.name | contains($kw))' "$all_workflows_list" >> "$keep_keyword_workflows_list"
+    done
+    
+    if [[ -s "$keep_keyword_workflows_list" ]]; then
+      log "INFO" "Found $(wc -l < "$keep_keyword_workflows_list") workflow runs to keep by keyword"
+      
+      # 从待删除列表中移除需要保留的
+      comm -23 <(sort "$all_workflows_list") <(sort "$keep_keyword_workflows_list") > "${all_workflows_list}.filtered"
+      mv "${all_workflows_list}.filtered" "$all_workflows_list"
     fi
-
-    # Generate a date list of workflows
-    all_workflows_date_list="josn_all_workflows_date_list"
-    # Generate a keep list of workflows
-    keep_workflows_list="josn_keep_workflows_list"
-    # Temporary josn file
-    tmp_josn_file="$(mktemp)"
-    # Sort and generate a keep list of workflows
-    if [[ -s "${all_workflows_list}" ]]; then
-        if [[ "${workflows_keep_day}" -eq "0" ]]; then
-            echo -e "${INFO} (2.5.1) Delete all workflows runs."
+  fi
+  
+  # 基于保留数量或天数过滤
+  keep_workflows_list=$(mktemp)
+  if [[ -s "$all_workflows_list" ]]; then
+    if [[ "$workflows_keep_latest" -gt 0 ]]; then
+      # 保留最新的N个
+      log "INFO" "Sorting workflow runs by date and keeping latest $workflows_keep_latest"
+      
+      # 按日期排序（最新的在前）
+      jq -s 'sort_by(.date) | reverse' "$all_workflows_list" > "${all_workflows_list}.sorted"
+      
+      # 保留最新的N个
+      head -n "$workflows_keep_latest" "${all_workflows_list}.sorted" > "$keep_workflows_list"
+      
+      # 剩下的是要删除的
+      tail -n +$((workflows_keep_latest + 1)) "${all_workflows_list}.sorted" > "$all_workflows_list"
+      
+      log "INFO" "Will keep $workflows_keep_latest workflow runs, delete $(wc -l < "$all_workflows_list")"
+    elif [[ "$workflows_keep_day" -gt 0 ]]; then
+      # 保留指定天数内的
+      log "INFO" "Keeping workflow runs newer than $workflows_keep_day days"
+      
+      cutoff_date=$(date -d "$workflows_keep_day days ago" +%Y-%m-%dT%H:%M:%SZ)
+      
+      while IFS= read -r line; do
+        run_date=$(echo "$line" | jq -r '.date')
+        
+        if [[ "$run_date" > "$cutoff_date" ]]; then
+          echo "$line" >> "$keep_workflows_list"
         else
-            # Remove workflows that meet the retention time
-            today_second=$(date -d "$(date +"%Y%m%d")" +%s)
-            cat ${all_workflows_list} | jq -r '.date' | awk -F'T' '{print $1}' | tr ' ' '\n' >${all_workflows_date_list}
-            cat ${all_workflows_date_list} | while read line; do
-                line_second="$(date -d "${line//-/}" +%s)"
-                day_diff="$(((${today_second} - ${line_second}) / 86400))"
-                [[ "${day_diff}" -lt "${workflows_keep_day}" ]] && {
-                    grep "${line}T" ${all_workflows_list} >>${keep_workflows_list}
-                    sed -i "/${line}T/d" ${all_workflows_list}
-                }
-            done
-            echo -e "${INFO} (2.5.2) The keep workflows runs list is generated successfully."
-
-            # Remove duplicate lines
-            [[ -s "${keep_workflows_list}" ]] && {
-                awk '!a[$0]++' ${keep_workflows_list} >${tmp_josn_file} && mv -f ${tmp_josn_file} ${keep_workflows_list}
-                [[ "${out_log}" == "true" ]] && echo -e "${INFO} (2.5.3) Keep workflows list:\n$(cat ${keep_workflows_list})"
-            }
+          echo "$line" >> "$all_workflows_list.filtered"
         fi
+      done < "$all_workflows_list"
+      
+      mv "$all_workflows_list.filtered" "$all_workflows_list"
+      
+      log "INFO" "Will keep $(wc -l < "$keep_workflows_list") workflow runs, delete $(wc -l < "$all_workflows_list")"
     else
-        echo -e "${NOTE} (2.5.4) The workflows runs list is empty. skip."
+      log "INFO" "No retention criteria specified, will delete all $(wc -l < "$all_workflows_list") workflow runs"
     fi
-
-    # Delete list
-    if [[ -s "${all_workflows_list}" ]]; then
-        [[ "${out_log}" == "true" ]] && echo -e "${INFO} (2.5.5) Delete workflows list:\n$(cat ${all_workflows_list})"
-    else
-        echo -e "${NOTE} (2.5.6) The delete workflows list is empty. skip."
-    fi
-
-    echo -e ""
+    
+    [[ "$out_log" == "true" ]] && log "INFO" "Workflow runs to delete:\n$(cat "$all_workflows_list")"
+  fi
 }
 
 del_workflows_runs() {
-    echo -e "${STEPS} Start deleting workflows runs..."
-
-    # Delete workflows runs
-    if [[ -s "${all_workflows_list}" && -n "$(cat ${all_workflows_list} | jq -r .id)" ]]; then
-        cat ${all_workflows_list} | jq -r .id | while read run_id; do
-            {
-                curl -s \
-                    -X DELETE \
-                    -H "Accept: application/vnd.github+json" \
-                    -H "Authorization: Bearer ${gh_token}" \
-                    -H "X-GitHub-Api-Version: 2022-11-28" \
-                    https://api.github.com/repos/${repo}/actions/runs/${run_id}
-            }
-        done
-        echo -e "${SUCCESS} (2.6.1) Workflows runs deleted successfully."
-    else
-        echo -e "${NOTE} (2.6.2) No Workflows runs need to be deleted. skip."
-    fi
-
-    echo -e ""
+  log "INFO" "Deleting workflow runs..."
+  
+  if [[ ! -s "$all_workflows_list" ]]; then
+    log "NOTE" "No workflow runs to delete, skipping"
+    return
+  fi
+  
+  local count=0
+  while IFS= read -r line; do
+    run_id=$(echo "$line" | jq -r '.id')
+    run_name=$(echo "$line" | jq -r '.name')
+    
+    log "INFO" "Deleting workflow run: $run_name (ID: $run_id)"
+    
+    api_request "DELETE" "repos/${repo}/actions/runs/${run_id}"
+    
+    count=$((count + 1))
+    sleep 0.5  # 避免触发API速率限制
+  done < "$all_workflows_list"
+  
+  log "SUCCESS" "Deleted $count workflow runs"
 }
 
-# Show welcome message
-echo -e "${STEPS} Welcome to use the delete older releases and workflow runs tool!"
-
-# Perform related operations in sequence
-init_var "${@}"
-
-# Delete release
-if [[ "${delete_releases}" == "true" ]]; then
+# ------------------------------
+# 主函数
+# ------------------------------
+main() {
+  log "INFO" "Starting delete older releases and workflows tool..."
+  
+  # 初始化参数
+  init_var "$@"
+  
+  # 处理releases
+  if [[ "$delete_releases" == "true" ]]; then
+    log "INFO" "Processing releases deletion..."
     get_releases_list
     out_releases_list
     del_releases_file
     del_releases_tags
-else
-    echo -e "${STEPS} Do not delete releases and tags."
-fi
-
-# Delete workflows
-if [[ "${delete_workflows}" == "true" ]]; then
+  else
+    log "INFO" "Skipping releases deletion"
+  fi
+  
+  # 处理workflows
+  if [[ "$delete_workflows" == "true" ]]; then
+    log "INFO" "Processing workflows deletion..."
     get_workflows_list
     out_workflows_list
     del_workflows_runs
-else
-    echo -e "${STEPS} Do not delete workflows."
-fi
+  else
+    log "INFO" "Skipping workflows deletion"
+  fi
+  
+  log "SUCCESS" "All operations completed successfully!"
+}
 
-# Show all process completion prompts
-echo -e "${SUCCESS} All process completed successfully."
-wait
+# 执行主函数
+main "$@"
