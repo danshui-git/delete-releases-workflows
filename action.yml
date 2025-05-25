@@ -81,13 +81,12 @@ runs:
         prerelease_option="${{ inputs.prerelease_option }}"
         releases_keep_latest="${{ inputs.releases_keep_latest }}"
         releases_keep_keyword="${{ inputs.releases_keep_keyword }}"
+        max_releases_fetch="${{ inputs.max_releases_fetch }}"
 
         delete_workflows="${{ inputs.delete_workflows }}"
         [[ -z "${delete_workflows}" ]] && echo -e "Please set whether to delete workflows." && exit 1
         workflows_keep_latest="${{ inputs.workflows_keep_latest }}"
         workflows_keep_keyword="${{ inputs.workflows_keep_keyword }}"
-
-        max_releases_fetch="${{ inputs.max_releases_fetch }}"
         max_workflows_fetch="${{ inputs.max_workflows_fetch }}"
 
         make_command=""
