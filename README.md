@@ -6,19 +6,48 @@ This Actions can delete specified repository's Releases and Workflow run logs.
 
 ## Instructions / 使用说明
 
-You can use this Actions by introducing it in the `.github/workflows/*.yml` workflow script, such as in [delete.yml](https://github.com/ophub/amlogic-s9xxx-armbian/blob/main/.github/workflows/delete-older-releases-workflows.yml).
+```yaml
+    steps:
+    - name: 检出仓库
+      uses: actions/checkout@v4
 
-在 `.github/workflows/*.yml` 工作流脚本中引入此 Actions 即可使用，例如 [delete.yml](https://github.com/ophub/amlogic-s9xxx-armbian/blob/main/.github/workflows/delete-older-releases-workflows.yml)。
+    - name: 清理releases和workflows
+      uses: 281677160/delete-releases-workflows@main
+      with:
+        delete_releases: true
+        prerelease_option: all
+        releases_keep_keyword: targz/Update
+        releases_keep_latest: 20
+        delete_tags: true
+        max_releases_fetch: 300
+        delete_workflows: true
+        workflows_keep_keyword: lede
+        workflows_keep_latest: 10
+        max_workflows_fetch: 300
+        repo: ${{ github.repository }}
+        gh_token: ${{ secrets.REPO_TOKEN }}
+```
 
 ```yaml
-- name: Delete releases and workflows runs
-  uses: ophub/delete-releases-workflows@main
-  with:
-    delete_releases: true
-    releases_keep_latest: 5
-    delete_workflows: true
-    workflows_keep_day: 10
-    gh_token: ${{ secrets.GITHUB_TOKEN }}
+
+    使用说明：
+
+    - name: 清理releases和workflows
+      uses: 281677160/delete-releases-workflows@main
+      with:
+        delete_releases: true                  清理releases开关，必须存在，如果不开就写false
+        prerelease_option: all                 设置清理releases是否区分预发行版本
+        releases_keep_keyword: targz/Update    清理releases时候保留关键字符名称的发布不清理
+        releases_keep_latest: 20               清理releases时候排除关键字符外，再保留N个时间靠前的发布不清理
+        delete_tags: true                      清理releases时候清理tags，一般都开启同步清理的
+        max_releases_fetch: 300                一次最多检查多少个releases，进行清理，设置太多的话，清理时间过长，或者会出现超时情况，最高可以设置1000
+
+        delete_workflows: true                清理workflows开关，必须存在，如果不开就写false
+        workflows_keep_keyword: lede          清理workflows时候保留关键字符名称的runs不清理
+        workflows_keep_latest: 10             清理workflows时候排除关键字符外，再保留N个时间靠前的runs不清理
+        max_workflows_fetch: 300              一次最多检查多少个workflows，进行清理，设置太多的话，清理时间过长，或者会出现超时情况，最高可以设置1000
+        repo: ${{ github.repository }}        清理仓库设置，${{ github.repository }} 默认为本仓库
+        gh_token: ${{ secrets.REPO_TOKEN }}   GITHUB_TOKEN，仓库密匙，必须存在
 ```
 
 ## Setting instructions / 设置说明
