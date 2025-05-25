@@ -62,6 +62,13 @@ runs:
         echo -e "Current Actions path: ${GITHUB_WORKSPACE}"
         echo -e "Current workflow run_id: ${GITHUB_RUN_ID}"
 
+        # Use GITHUB_ACTION_PATH to get the current action path
+        echo -e "Current Action path: ${GITHUB_ACTION_PATH}"
+
+        # Change to the action directory
+        cd "${GITHUB_ACTION_PATH}"
+        echo -e "Changed to directory: $(pwd)"
+
         gh_token="${{ inputs.gh_token }}"
         [[ -z "${gh_token}" ]] && echo -e "Please set the token: [ gh_token ]." && exit 1
         repo="${{ inputs.repo }}"
@@ -99,14 +106,14 @@ runs:
         [[ -n "${max_workflows_fetch}" ]] && make_command="${make_command} -W ${max_workflows_fetch}"
 
         # Ensure the script file exists
-        if [[ ! -f "${GITHUB_WORKSPACE}/del.sh" ]]; then
+        if [[ ! -f "del.sh" ]]; then
           echo -e "Error: del.sh file not found in the current directory."
           exit 1
         fi
 
         # Make the script executable and run it
-        chmod +x "${GITHUB_WORKSPACE}/del.sh"
-        "${GITHUB_WORKSPACE}/del.sh" ${make_command}
+        chmod +x del.sh
+        ./del.sh ${make_command}
 
 branding:
   icon: "terminal"
