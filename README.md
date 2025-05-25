@@ -16,12 +16,10 @@ This Actions can delete specified repository's Releases and Workflow run logs.
       with:
         delete_releases: true
         prerelease_option: all
-        releases_keep_keyword: targz/Update
         releases_keep_latest: 20
         delete_tags: true
         max_releases_fetch: 300
         delete_workflows: true
-        workflows_keep_keyword: lede
         workflows_keep_latest: 10
         max_workflows_fetch: 300
         repo: ${{ github.repository }}
