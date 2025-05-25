@@ -56,6 +56,11 @@ inputs:
 runs:
   using: "composite"
   steps:
+    - name: Checkout action repository
+      uses: actions/checkout@v4
+      with:
+        repository: 281677160/delete-releases-workflows
+        path: delete-action
     - shell: bash
       run: |
         set -euo pipefail
@@ -113,6 +118,7 @@ runs:
         
         # 执行脚本
         echo "==> Executing deletion script with options: ${make_command[*]}"
+        cd delete-action
         chmod +x del.sh
         ./del.sh "${make_command[@]}"
 
