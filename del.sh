@@ -1,28 +1,5 @@
 #!/usr/bin/env bash
-#==============================================================================================
-#
-# Function: Delete older releases and workflow runs
-# Copyright (C) 2023- https://github.com/ophub/delete-releases-workflows
-# Use api.github.com official documentation
-# https://docs.github.com/en/rest/releases/releases?list-releases
-# https://docs.github.com/en/rest/actions/workflow-runs?list-workflow-runs-for-a-repository
-#
-#======================================= Functions list =======================================
-#
-# error_msg           : Output error message
-# init_var            : Initialize all variables
-#
-# get_releases_list   : Get the release list
-# out_releases_list   : Output the release list
-# del_releases_file   : Delete releases files
-# del_releases_tags   : Delete releases tags
-#
-# get_workflows_list  : Get the workflows list
-# out_workflows_list  : Output the workflows list
-# del_workflows_runs  : Delete workflows runs
-#
-#=============================== Set make environment variables ===============================
-#
+
 # Set default value
 delete_releases="false"
 delete_tags="false"
