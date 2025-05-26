@@ -52,7 +52,7 @@
 
 You can configure the deletion settings in the delete.yml file with the following options:
 
-您可以在 delete.yml 文件中使用以下选项配置删除设置：
+您可以在 清理releases和workflows 选项配置：
 
 | Key / 选项               | Required   | Description / 说明                       |
 | ----------------------- | ---------- | ---------------------------------------- |
