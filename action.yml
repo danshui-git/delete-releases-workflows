@@ -59,7 +59,8 @@ runs:
     - shell: bash
       run: |
         # Use GITHUB_WORKSPACE to get the current workspace directory
-        cd "${{ github.action_path }}"
+        GITHUB_ACTION_PATH="${{ github.action_path }}"
+        cd "$GITHUB_ACTION_PATH"
 
         gh_token="${{ inputs.gh_token }}"
         [[ -z "${gh_token}" ]] && echo -e "Error: Please set the token: [ gh_token ]." && exit 1
