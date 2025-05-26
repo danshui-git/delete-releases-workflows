@@ -1,6 +1,6 @@
 # Function description / 功能说明
 
-此仓库代码由 https://github.com/ophub/delete-releases-workflows 仓库代码修改而成
+此仓库代码由《[delete-releases-workflows](https://github.com/ophub/delete-releases-workflows)》仓库代码修改而成
 
 这个 Actions 可以删除指定仓库的 Releases 和 Workflows 运行记录。
 
