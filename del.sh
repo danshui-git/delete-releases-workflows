@@ -6,14 +6,14 @@ delete_tags="false"
 prerelease_option="all"
 releases_keep_latest="90"
 releases_keep_keyword=()
+max_releases_fetch="100"
 delete_workflows="false"
 workflows_keep_latest="90"
 workflows_keep_keyword=()
-out_log="false"
-github_per_page="100"
-github_max_page="100"
-max_releases_fetch="100"
 max_workflows_fetch="100"
+out_log="false"
+github_per_page="100"  # 每次请求获取的数量
+github_max_page="100"  # 最大请求页数
 
 # Set font color
 STEPS="[\033[95m STEPS \033[0m]"
@@ -29,6 +29,25 @@ error_msg() {
     exit 1
 }
 
+# 验证布尔值
+validate_boolean() {
+    local var="$1" param_name="$2"
+    if [[ ! "$var" =~ ^(true|false)$ ]]; then
+        error_msg "Invalid value for $param_name: must be 'true' or 'false'"
+    fi
+}
+
+# 验证正整数（1-1000）
+validate_positive_integer() {
+    local var="$1" param_name="$2" max="$3"
+    if ! [[ "$var" =~ ^[1-9][0-9]*$ ]]; then
+        error_msg "Invalid value for $param_name: must be a positive integer"
+    fi
+    if [[ "$var" -gt "$max" ]]; then
+        error_msg "Invalid value for $param_name: maximum value is $max"
+    fi
+}
+
 init_var() {
     echo -e "${STEPS} Start Initializing Variables..."
 
@@ -36,7 +55,7 @@ init_var() {
     sudo apt-get -qq update && sudo apt-get -qq install -y jq curl
 
     # If it is followed by [ : ], it means that the option requires a parameter value
-    get_all_ver="$(getopt "r:a:t:p:l:w:s:d:k:o:g:R:W:" "${@}")"
+    get_all_ver="$(getopt "r:a:t:p:l:w:c:s:d:k:o:h:g:" "${@}")"
 
     while [[ -n "${1}" ]]; do
         case "${1}" in
@@ -88,6 +107,14 @@ init_var() {
                 error_msg "Invalid -w parameter [ ${2} ]!"
             fi
             ;;
+        -c | --max_releases_fetch)
+            if [[ -n "${2}" ]]; then
+                max_releases_fetch="${2}"
+                shift
+            else
+                error_msg "Invalid -c parameter [ ${2} ]!"
+            fi
+            ;;
         -s | --delete_workflows)
             if [[ -n "${2}" ]]; then
                 delete_workflows="${2}"
@@ -128,20 +155,12 @@ init_var() {
                 error_msg "Invalid -g parameter [ ${2} ]!"
             fi
             ;;
-        -R | --max_releases_fetch)
-            if [[ -n "${2}" ]]; then
-                max_releases_fetch="${2}"
-                shift
-            else
-                error_msg "Invalid -R parameter [ ${2} ]!"
-            fi
-            ;;
-        -W | --max_workflows_fetch)
+        -h | --max_workflows_fetch)
             if [[ -n "${2}" ]]; then
                 max_workflows_fetch="${2}"
                 shift
             else
-                error_msg "Invalid -W parameter [ ${2} ]!"
+                error_msg "Invalid -h parameter [ ${2} ]!"
             fi
             ;;
         *)
@@ -151,67 +170,90 @@ init_var() {
         shift
     done
 
+    # 参数验证
+    validate_boolean "$delete_releases" "delete_releases"
+    validate_boolean "$delete_tags" "delete_tags"
+    validate_boolean "$delete_workflows" "delete_workflows"
+    validate_boolean "$out_log" "out_log"
+    
+    validate_positive_integer "$releases_keep_latest" "releases_keep_latest" 1000
+    validate_positive_integer "$workflows_keep_latest" "workflows_keep_latest" 1000
+    validate_positive_integer "$max_releases_fetch" "max_releases_fetch" 1000
+    validate_positive_integer "$max_workflows_fetch" "max_workflows_fetch" 1000
+    
+    echo -e ""
     echo -e "${INFO} repo: [ ${repo} ]"
     echo -e "${INFO} delete_releases: [ ${delete_releases} ]"
     echo -e "${INFO} delete_tags: [ ${delete_tags} ]"
     echo -e "${INFO} prerelease_option: [ ${prerelease_option} ]"
     echo -e "${INFO} releases_keep_latest: [ ${releases_keep_latest} ]"
     echo -e "${INFO} releases_keep_keyword: [ $(echo ${releases_keep_keyword[@]} | xargs) ]"
+    echo -e "${INFO} max_releases_fetch: [ ${max_releases_fetch} ]"
     echo -e "${INFO} delete_workflows: [ ${delete_workflows} ]"
     echo -e "${INFO} workflows_keep_latest: [ ${workflows_keep_latest} ]"
     echo -e "${INFO} workflows_keep_keyword: [ $(echo ${workflows_keep_keyword[@]} | xargs) ]"
-    echo -e "${INFO} out_log: [ ${out_log} ]"
-    echo -e "${INFO} max_releases_fetch: [ ${max_releases_fetch} ]"
     echo -e "${INFO} max_workflows_fetch: [ ${max_workflows_fetch} ]"
+    echo -e "${INFO} out_log: [ ${out_log} ]"
     echo -e ""
 }
 
 get_releases_list() {
     echo -e "${STEPS} Start querying the releases list..."
 
-    # Set github API default page
-    github_page="1"
-
     # Create a file to store the results
     all_releases_list="json_api_releases"
     echo "" >"${all_releases_list}"
+    
+    # 计算需要请求的总页数
+    total_pages=$(( (max_releases_fetch + github_per_page - 1) / github_per_page ))
+    if [[ "$total_pages" -gt "$github_max_page" ]]; then
+        total_pages="$github_max_page"
+        echo -e "${NOTE} Maximum pages limited to $github_max_page"
+    fi
 
     # Get the release list
-    while true; do
+    current_count=0
+    for (( page=1; page<=total_pages; page++ )); do
         response="$(
-            curl -s -L \
+            curl -s -L -f \
                 -H "Authorization: Bearer ${gh_token}" \
                 -H "Accept: application/vnd.github+json" \
                 -H "X-GitHub-Api-Version: 2022-11-28" \
-                "https://api.github.com/repos/${repo}/releases?per_page=${github_per_page}&page=${github_page}"
-        )"
+                "https://api.github.com/repos/${repo}/releases?per_page=${github_per_page}&page=${page}"
+        )" || {
+            echo -e "${ERROR} Failed to fetch releases from GitHub API (page $page)"
+            break
+        }
 
-        # Check if the response is empty or an error occurred
-        if [[ -z "${response}" ]] || [[ "${response}" == *"Not Found"* ]]; then
+        # Get the number of results returned by the current page
+        get_results_length="$(echo "${response}" | jq '. | length')"
+        echo -e "${INFO} (1.1.${page}) Query the [ ${page}th ] page and return [ ${get_results_length} ] results."
+
+        # 计算还需要获取的数量
+        remaining=$(( max_releases_fetch - current_count ))
+        if [[ "$remaining" -le 0 ]]; then
+            break
+        fi
+
+        # 限制本次处理的数量
+        if [[ "$get_results_length" -gt "$remaining" ]]; then
+            echo "${response}" |
+                jq -s '.[] | sort_by(.published_at)|reverse | .[0:'$remaining']' |
+                jq -c '.[] | {date: .published_at, id: .id, prerelease: .prerelease, tag_name: .tag_name}' \
+                    >>"${all_releases_list}"
+            current_count=$(( current_count + remaining ))
             break
         else
-            # Get the number of results returned by the current page
-            get_results_length="$(echo "${response}" | jq '. | length')"
-            echo -e "${INFO} (1.1.${github_page}) Query the [ ${github_page}th ] page and return [ ${get_results_length} ] results."
-
-            # Sort the results
             echo "${response}" |
                 jq -s '.[] | sort_by(.published_at)|reverse' |
                 jq -c '.[] | {date: .published_at, id: .id, prerelease: .prerelease, tag_name: .tag_name}' \
                     >>"${all_releases_list}"
+            current_count=$(( current_count + get_results_length ))
         fi
 
-        # Check if the current page has fewer results than the per_page limit
-        if [[ "${get_results_length}" -lt "${github_per_page}" ]]; then
+        # 如果当前页返回的数量小于请求数量，说明已获取全部数据
+        if [[ "$get_results_length" -lt "$github_per_page" ]]; then
             break
-        fi
-
-        # Check if the current page is greater than the maximum page
-        if [[ "${github_page}" -ge "${github_max_page}" ]]; then
-            echo -e "${NOTE} (1.2.1) Reach the maximum page number (${github_max_page}) in the query. skip."
-            break
-        else
-            github_page="$((github_page + 1))"
         fi
     done
 
@@ -220,9 +262,10 @@ get_releases_list() {
         sed -i '/^[[:space:]]*$/d' "${all_releases_list}"
 
         # Print the result log
+        actual_count=$(cat "${all_releases_list}" | wc -l)
         echo -e "${INFO} (1.3.1) The api.github.com for releases request successfully."
+        echo -e "${INFO} (1.3.2) Total releases fetched: [ ${actual_count} / ${max_releases_fetch} ]"
         [[ "${out_log}" == "true" ]] && {
-            echo -e "${INFO} (1.3.2) Count of releases list: [ $(cat ${all_releases_list} | wc -l) ]"
             echo -e "${INFO} (1.3.3) All releases list:\n$(cat ${all_releases_list})"
         }
     else
@@ -310,19 +353,29 @@ del_releases_file() {
 
     # Delete releases
     if [[ -s "${all_releases_list}" && -n "$(cat ${all_releases_list} | jq -r .id)" ]]; then
+        total=$(cat ${all_releases_list} | wc -l)
+        count=0
+        
         cat ${all_releases_list} | jq -r .id | while read release_id; do
-            {
-                curl -s \
-                    -X DELETE \
-                    -H "Authorization: Bearer ${gh_token}" \
-                    -H "Accept: application/vnd.github+json" \
-                    -H "X-GitHub-Api-Version: 2022-11-28" \
-                    "https://api.github.com/repos/${repo}/releases/${release_id}"
-            }
+            count=$((count + 1))
+            echo -e "${INFO} (1.7.1) Deleting release ${count}/${total}: ID=${release_id}"
+            
+            response=$(curl -s -o /dev/null -w "%{http_code}" \
+                -X DELETE \
+                -H "Authorization: Bearer ${gh_token}" \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "https://api.github.com/repos/${repo}/releases/${release_id}")
+                
+            if [[ "$response" -eq 204 ]]; then
+                echo -e "${SUCCESS} (1.7.2) Release ${count}/${total} deleted successfully"
+            else
+                echo -e "${ERROR} (1.7.3) Failed to delete release ${count}/${total}: HTTP ${response}"
+            fi
         done
-        echo -e "${SUCCESS} (1.7.1) Releases deleted successfully."
+        echo -e "${SUCCESS} (1.7.4) Releases deletion completed"
     else
-        echo -e "${NOTE} (1.7.2) No releases need to be deleted. skip."
+        echo -e "${NOTE} (1.7.5) No releases need to be deleted. skip."
     fi
 
     echo -e ""
@@ -333,19 +386,29 @@ del_releases_tags() {
 
     # Delete the tags associated with releases
     if [[ "${delete_tags}" == "true" && -s "${all_releases_list}" && -n "$(cat ${all_releases_list} | jq -r .tag_name)" ]]; then
+        total=$(cat ${all_releases_list} | wc -l)
+        count=0
+        
         cat ${all_releases_list} | jq -r .tag_name | while read tag_name; do
-            {
-                curl -s \
-                    -X DELETE \
-                    -H "Authorization: Bearer ${gh_token}" \
-                    -H "Accept: application/vnd.github+json" \
-                    -H "X-GitHub-Api-Version: 2022-11-28" \
-                    "https://api.github.com/repos/${repo}/git/refs/tags/${tag_name}"
-            }
+            count=$((count + 1))
+            echo -e "${INFO} (1.8.1) Deleting tag ${count}/${total}: ${tag_name}"
+            
+            response=$(curl -s -o /dev/null -w "%{http_code}" \
+                -X DELETE \
+                -H "Authorization: Bearer ${gh_token}" \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "https://api.github.com/repos/${repo}/git/refs/tags/${tag_name}")
+                
+            if [[ "$response" -eq 204 ]]; then
+                echo -e "${SUCCESS} (1.8.2) Tag ${count}/${total} deleted successfully"
+            else
+                echo -e "${ERROR} (1.8.3) Failed to delete tag ${count}/${total}: HTTP ${response}"
+            fi
         done
-        echo -e "${SUCCESS} (1.8.1) Tags deleted successfully."
+        echo -e "${SUCCESS} (1.8.4) Tags deletion completed"
     else
-        echo -e "${NOTE} (1.8.2) No tags need to be deleted. skip."
+        echo -e "${NOTE} (1.8.5) No tags need to be deleted. skip."
     fi
 
     echo -e ""
@@ -354,48 +417,58 @@ del_releases_tags() {
 get_workflows_list() {
     echo -e "${STEPS} Start querying the workflows list..."
 
-    # Set github API default page
-    github_page="1"
-
     # Create a file to store the results
     all_workflows_list="json_api_workflows"
     echo "" >"${all_workflows_list}"
+    
+    # 计算需要请求的总页数
+    total_pages=$(( (max_workflows_fetch + github_per_page - 1) / github_per_page ))
+    if [[ "$total_pages" -gt "$github_max_page" ]]; then
+        total_pages="$github_max_page"
+        echo -e "${NOTE} Maximum pages limited to $github_max_page"
+    fi
 
-    # Get the release list
-    while true; do
+    # Get the workflows list
+    current_count=0
+    for (( page=1; page<=total_pages; page++ )); do
         response="$(
-            curl -s -L \
+            curl -s -L -f \
                 -H "Authorization: Bearer ${gh_token}" \
                 -H "Accept: application/vnd.github+json" \
                 -H "X-GitHub-Api-Version: 2022-11-28" \
-                "https://api.github.com/repos/${repo}/actions/runs?per_page=${github_per_page}&page=${github_page}"
-        )"
+                "https://api.github.com/repos/${repo}/actions/runs?per_page=${github_per_page}&page=${page}"
+        )" || {
+            echo -e "${ERROR} Failed to fetch workflows from GitHub API (page $page)"
+            break
+        }
 
-        # Check if the response is empty or an error occurred
-        if [[ -z "${response}" ]] || [[ "${response}" == *"Not Found"* ]]; then
+        # Get the number of results returned by the current page
+        get_results_length="$(echo "${response}" | jq -r '.workflow_runs | length')"
+        echo -e "${INFO} (2.1.${page}) Query the [ ${page}th ] page and return [ ${get_results_length} ] results."
+
+        # 计算还需要获取的数量
+        remaining=$(( max_workflows_fetch - current_count ))
+        if [[ "$remaining" -le 0 ]]; then
+            break
+        fi
+
+        # 限制本次处理的数量
+        if [[ "$get_results_length" -gt "$remaining" ]]; then
+            echo "${response}" |
+                jq -c ".workflow_runs[0:'$remaining'] | select(.status != \"in_progress\") | {date: .updated_at, id: .id, name: .name}" \
+                    >>"${all_workflows_list}"
+            current_count=$(( current_count + remaining ))
             break
         else
-            # Get the number of results returned by the current page
-            get_results_length="$(echo "${response}" | jq -r '.workflow_runs | length')"
-            echo -e "${INFO} (2.1.${github_page}) Query the [ ${github_page}th ] page and return [ ${get_results_length} ] results."
-
-            # Sort the results
             echo "${response}" |
                 jq -c '.workflow_runs[] | select(.status != "in_progress") | {date: .updated_at, id: .id, name: .name}' \
                     >>"${all_workflows_list}"
+            current_count=$(( current_count + get_results_length ))
         fi
 
-        # Check if the current page has fewer results than the per_page limit
-        if [[ "${get_results_length}" -lt "${github_per_page}" ]]; then
+        # 如果当前页返回的数量小于请求数量，说明已获取全部数据
+        if [[ "$get_results_length" -lt "$github_per_page" ]]; then
             break
-        fi
-
-        # Check if the current page is greater than the maximum page
-        if [[ "${github_page}" -ge "${github_max_page}" ]]; then
-            echo -e "${NOTE} (2.2.1) Reach the maximum page number (${github_max_page}) in the query. skip."
-            break
-        else
-            github_page="$((github_page + 1))"
         fi
     done
 
@@ -404,9 +477,10 @@ get_workflows_list() {
         sed -i '/^[[:space:]]*$/d' "${all_workflows_list}"
 
         # Print the result log
+        actual_count=$(cat "${all_workflows_list}" | wc -l)
         echo -e "${INFO} (2.3.1) The api.github.com for workflows request successfully."
+        echo -e "${INFO} (2.3.2) Total workflows fetched: [ ${actual_count} / ${max_workflows_fetch} ]"
         [[ "${out_log}" == "true" ]] && {
-            echo -e "${INFO} (2.3.2) Count of workflow runs: [ $(cat ${all_workflows_list} | wc -l) ]"
             echo -e "${INFO} (2.3.3) All workflows runs list:\n$(cat ${all_workflows_list})"
         }
     else
@@ -480,19 +554,29 @@ del_workflows_runs() {
 
     # Delete workflows runs
     if [[ -s "${all_workflows_list}" && -n "$(cat ${all_workflows_list} | jq -r .id)" ]]; then
+        total=$(cat ${all_workflows_list} | wc -l)
+        count=0
+        
         cat ${all_workflows_list} | jq -r .id | while read run_id; do
-            {
-                curl -s \
-                    -X DELETE \
-                    -H "Authorization: Bearer ${gh_token}" \
-                    -H "Accept: application/vnd.github+json" \
-                    -H "X-GitHub-Api-Version: 2022-11-28" \
-                    "https://api.github.com/repos/${repo}/actions/runs/${run_id}"
-            }
+            count=$((count + 1))
+            echo -e "${INFO} (2.6.1) Deleting workflow run ${count}/${total}: ID=${run_id}"
+            
+            response=$(curl -s -o /dev/null -w "%{http_code}" \
+                -X DELETE \
+                -H "Authorization: Bearer ${gh_token}" \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "https://api.github.com/repos/${repo}/actions/runs/${run_id}")
+                
+            if [[ "$response" -eq 204 ]]; then
+                echo -e "${SUCCESS} (2.6.2) Workflow run ${count}/${total} deleted successfully"
+            else
+                echo -e "${ERROR} (2.6.3) Failed to delete workflow run ${count}/${total}: HTTP ${response}"
+            fi
         done
-        echo -e "${SUCCESS} (2.6.1) Workflows runs deleted successfully."
+        echo -e "${SUCCESS} (2.6.4) Workflow runs deletion completed"
     else
-        echo -e "${NOTE} (2.6.2) No Workflows runs need to be deleted. skip."
+        echo -e "${NOTE} (2.6.5) No Workflows runs need to be deleted. skip."
     fi
 
     echo -e ""
