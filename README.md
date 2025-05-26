@@ -38,12 +38,12 @@
         releases_keep_keyword: targz/Update    清理releases时候保留关键字符名称的发布不清理
         releases_keep_latest: 20               清理releases时候排除关键字符外，再保留N个时间靠前的发布不清理
         delete_tags: true                      清理releases时候清理tags，一般都开启同步清理的
-        max_releases_fetch: 300                一次最多检查多少个releases，进行清理，设置太多的话，清理时间过长，或者会出现超时情况，最高可以设置1000
+        max_releases_fetch: 300                一次最多检查多少个releases，进行清理，设置太多的话，清理时间过长，或者会出现超时情况，按100倍数增加，最高可以设置1000（比如100、200、300...800、900、1000）
 
         delete_workflows: true                清理workflows开关，必须存在，如果不开就写false
         workflows_keep_keyword: lede          清理workflows时候保留关键字符名称的runs不清理
         workflows_keep_latest: 10             清理workflows时候排除关键字符外，再保留N个时间靠前的runs不清理
-        max_workflows_fetch: 300              一次最多检查多少个workflows，进行清理，设置太多的话，清理时间过长，或者会出现超时情况，最高可以设置1000
+        max_workflows_fetch: 300              一次最多检查多少个workflows，进行清理，设置太多的话，清理时间过长，或者会出现超时情况，按100倍数增加，最高可以设置1000（比如100、200、300...800、900、1000）
         repo: ${{ github.repository }}        清理仓库设置，${{ github.repository }} 默认为本仓库
         gh_token: ${{ secrets.REPO_TOKEN }}   GITHUB_TOKEN，仓库密匙，必须存在
 ```
