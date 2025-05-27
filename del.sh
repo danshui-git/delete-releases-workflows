@@ -24,17 +24,6 @@
 #=============================== Set make environment variables ===============================
 #
 # Set default value
-delete_releases="false"
-delete_tags="false"
-prerelease_option="all"
-releases_keep_latest="90"
-releases_keep_keyword=()
-max_releases_fetch="200"
-delete_workflows="false"
-workflows_keep_latest="90"
-workflows_keep_keyword=()
-max_workflows_fetch="200"
-out_log="false"
 github_per_page="100"  # 每次请求获取的数量
 github_max_page="100"  # 最大请求页数
 
@@ -629,6 +618,8 @@ if [[ "${delete_releases}" == "true" ]]; then
     out_releases_list
     del_releases_file
     del_releases_tags
+elif [[ -z "${delete_releases}" ]]; then
+    echo -e "${ERROR} The delete_deleases parameter is not set. Please set the parameter to 'true' or 'false'."
 else
     echo -e "${STEPS} Do not delete releases and tags."
 fi
@@ -638,6 +629,8 @@ if [[ "${delete_workflows}" == "true" ]]; then
     get_workflows_list
     out_workflows_list
     del_workflows_runs
+elif [[ -z "${delete_workflows}" ]]; then
+    echo -e "${ERROR} The delete_workflows parameter is not set. Please set the parameter to 'true' or 'false'."
 else
     echo -e "${STEPS} Do not delete workflows."
 fi
