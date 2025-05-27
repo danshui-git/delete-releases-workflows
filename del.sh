@@ -139,12 +139,12 @@ init_var() {
                 error_msg "Invalid -k parameter [ ${2} ]!"
             fi
             ;;
-        -o | --out_log)
+        -h | --max_workflows_fetch)
             if [[ -n "${2}" ]]; then
-                out_log="${2}"
+                max_workflows_fetch="${2}"
                 shift
             else
-                error_msg "Invalid -o parameter [ ${2} ]!"
+                error_msg "Invalid -h parameter [ ${2} ]!"
             fi
             ;;
         -g | --gh_token)
@@ -155,12 +155,12 @@ init_var() {
                 error_msg "Invalid -g parameter [ ${2} ]!"
             fi
             ;;
-        -h | --max_workflows_fetch)
+        -o | --out_log)
             if [[ -n "${2}" ]]; then
-                max_workflows_fetch="${2}"
+                out_log="${2}"
                 shift
             else
-                error_msg "Invalid -h parameter [ ${2} ]!"
+                error_msg "Invalid -o parameter [ ${2} ]!"
             fi
             ;;
         *)
