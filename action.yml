@@ -103,9 +103,10 @@ runs:
         [[ -n "${delete_workflows}" ]] && make_command="${make_command} -s ${delete_workflows}"
         [[ -n "${workflows_keep_latest}" ]] && make_command="${make_command} -d ${workflows_keep_latest}"
         [[ -n "${workflows_keep_keyword}" ]] && make_command="${make_command} -k ${workflows_keep_keyword}"
+        [[ -n "${max_workflows_fetch}" ]] && make_command="${make_command} -h ${max_workflows_fetch}"
         [[ -n "${out_log}" ]] && make_command="${make_command} -o ${out_log}"
         [[ -n "${gh_token}" ]] && make_command="${make_command} -g ${gh_token}"
-        [[ -n "${max_workflows_fetch}" ]] && make_command="${make_command} -h ${max_workflows_fetch}"
+
 
         # Ensure the script file exists
         if [[ ! -f "del.sh" ]]; then
