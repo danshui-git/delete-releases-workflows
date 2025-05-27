@@ -64,12 +64,7 @@ runs:
         GITHUB_ACTION_PATH="${{ github.action_path }}"
         cd "$GITHUB_ACTION_PATH"
 
-        ERROR="[\033[91m ERROR \033[0m]"
-        error_msg() {
-            echo -e "${ERROR} ${1}"
-            exit 1
-        }
-
+        # 所有应用参数
         gh_token="${{ inputs.gh_token }}"
         delete_releases="${{ inputs.delete_releases }}"
         delete_tags="${{ inputs.delete_tags }}"
@@ -84,12 +79,20 @@ runs:
         out_log="${{ inputs.out_log }}"
         repo="${{ inputs.repo }}"
 
+        # 错误提示颜色
+        ERROR="[\033[91m ERROR \033[0m]"
+        error_msg() {
+            echo -e "${ERROR} ${1}"
+            exit 1
+        }
+
         # 验证必需参数
         [[ -z "${gh_token}" ]] && error_msg "Please set the token: [ gh_token ]."
         [[ -z "${delete_releases}" ]] && error_msg "Please set whether to delete releases."
         [[ -z "${delete_workflows}" ]] && error_msg "Please set whether to delete workflows."
         [[ ! -f "del.sh" ]] && error_msg "del.sh file not found in the current directory."
 
+        # 构建命令行参数
         make_command=""
         [[ -n "${repo}" ]] && make_command="${make_command} -r ${repo}"
         [[ -n "${delete_releases}" ]] && make_command="${make_command} -a ${delete_releases}"
@@ -105,7 +108,7 @@ runs:
         [[ -n "${gh_token}" ]] && make_command="${make_command} -g ${gh_token}"
         [[ -n "${out_log}" ]] && make_command="${make_command} -o ${out_log}"
 
-        # Make the script executable and run it
+        # 执行脚本
         chmod +x del.sh
         ./del.sh ${make_command}
 
