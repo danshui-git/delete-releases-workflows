@@ -618,8 +618,6 @@ if [[ "${delete_releases}" == "true" ]]; then
     out_releases_list
     del_releases_file
     del_releases_tags
-elif [[ -z "${delete_releases}" ]]; then
-    echo -e "${ERROR} The delete_deleases parameter is not set. Please set the parameter to 'true' or 'false'."
 else
     echo -e "${STEPS} Do not delete releases and tags."
 fi
@@ -629,8 +627,6 @@ if [[ "${delete_workflows}" == "true" ]]; then
     get_workflows_list
     out_workflows_list
     del_workflows_runs
-elif [[ -z "${delete_workflows}" ]]; then
-    echo -e "${ERROR} The delete_workflows parameter is not set. Please set the parameter to 'true' or 'false'."
 else
     echo -e "${STEPS} Do not delete workflows."
 fi
