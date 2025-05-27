@@ -82,16 +82,6 @@ runs:
         workflows_keep_keyword="${{ inputs.workflows_keep_keyword }}"
         max_workflows_fetch="${{ inputs.max_workflows_fetch }}"
 
-        # Validate boolean inputs
-        if [[ ! "$delete_releases" =~ ^(true|false)$ ]]; then
-          echo -e "Error: delete_releases must be 'true' or 'false'"
-          exit 1
-        fi
-        if [[ ! "$delete_workflows" =~ ^(true|false)$ ]]; then
-          echo -e "Error: delete_workflows must be 'true' or 'false'"
-          exit 1
-        fi
-
         make_command=""
         [[ -n "${repo}" ]] && make_command="${make_command} -r ${repo}"
         [[ -n "${delete_releases}" ]] && make_command="${make_command} -a ${delete_releases}"
