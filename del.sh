@@ -1,5 +1,28 @@
 #!/usr/bin/env bash
-
+#==============================================================================================
+#
+# Function: Delete older releases and workflow runs
+# Copyright (C) 2023- https://github.com/ophub/delete-releases-workflows
+# Use api.github.com official documentation
+# https://docs.github.com/en/rest/releases/releases?list-releases
+# https://docs.github.com/en/rest/actions/workflow-runs?list-workflow-runs-for-a-repository
+#
+#======================================= Functions list =======================================
+#
+# error_msg           : Output error message
+# init_var            : Initialize all variables
+#
+# get_releases_list   : Get the release list
+# out_releases_list   : Output the release list
+# del_releases_file   : Delete releases files
+# del_releases_tags   : Delete releases tags
+#
+# get_workflows_list  : Get the workflows list
+# out_workflows_list  : Output the workflows list
+# del_workflows_runs  : Delete workflows runs
+#
+#=============================== Set make environment variables ===============================
+#
 # Set default value
 delete_releases="false"
 delete_tags="false"
@@ -33,7 +56,15 @@ error_msg() {
 validate_boolean() {
     local var="$1" param_name="$2"
     if [[ ! "$var" =~ ^(true|false)$ ]]; then
-        error_msg "Invalid value for $param_name: must be 'true' or 'false'"
+        error_msg "Invalid value for $param_name: $var must be 'true' or 'false'"
+    fi
+}
+
+# 验证预发布选项
+validate_prerelease() {
+    local var="$1" param_name="$2"
+    if [[ ! "$var" =~ ^(true|false|all)$ ]]; then
+        error_msg "Invalid value for $param_name: $var must be 'true', 'false', or 'all'."
     fi
 }
 
@@ -41,10 +72,10 @@ validate_boolean() {
 validate_positive_integer() {
     local var="$1" param_name="$2" max="$3"
     if ! [[ "$var" =~ ^[1-9][0-9]*$ ]]; then
-        error_msg "Invalid value for $param_name: must be a positive integer"
+        error_msg "Invalid value for $param_name: $var must be a positive integer"
     fi
     if [[ "$var" -gt "$max" ]]; then
-        error_msg "Invalid value for $param_name: maximum value is $max"
+        error_msg "Invalid value for $param_name: $var maximum value is $max"
     fi
 }
 
@@ -175,7 +206,11 @@ init_var() {
     validate_boolean "$delete_tags" "delete_tags"
     validate_boolean "$delete_workflows" "delete_workflows"
     validate_boolean "$out_log" "out_log"
-    
+
+    # 验证预发布选项
+    validate_prerelease "${prerelease_option}" "prerelease_option"
+
+    # 验证整数值参数
     validate_positive_integer "$releases_keep_latest" "releases_keep_latest" 1000
     validate_positive_integer "$workflows_keep_latest" "workflows_keep_latest" 1000
     validate_positive_integer "$max_releases_fetch" "max_releases_fetch" 1000
