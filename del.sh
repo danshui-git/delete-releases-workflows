@@ -55,7 +55,7 @@ init_var() {
     sudo apt-get -qq update && sudo apt-get -qq install -y jq curl
 
     # If it is followed by [ : ], it means that the option requires a parameter value
-    get_all_ver="$(getopt "r:a:t:p:l:w:c:s:d:k:o:h:g:" "${@}")"
+    get_all_ver="$(getopt "r:a:t:p:l:w:c:s:d:k:h:g:o:" "${@}")"
 
     while [[ -n "${1}" ]]; do
         case "${1}" in
