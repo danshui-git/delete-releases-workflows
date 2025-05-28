@@ -15,14 +15,7 @@
       uses: danshui-git/delete-releases-workflows@main
       with:
         delete_releases: true
-        prerelease_option: all
-        releases_keep_latest: 90
-        delete_tags: true
-        max_releases_fetch: 300
         delete_workflows: true
-        workflows_keep_latest: 90
-        max_workflows_fetch: 300
-        repo: ${{ github.repository }}
         gh_token: ${{ secrets.REPO_TOKEN }}
 ```
 
