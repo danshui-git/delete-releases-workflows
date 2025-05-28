@@ -60,7 +60,7 @@ validate_prerelease() {
 # 验证正整数（1-1000）
 validate_positive_integer() {
     local var="$1" param_name="$2" max="$3"
-    if ! [[ "$var" =~ ^[1-9][0-9]*$ ]]; then
+    if ! [[ "$var" =~ ^[0-9][0-9]*$ ]]; then
         error_msg "Invalid value for $param_name: $var must be a positive integer"
     fi
     if [[ "$var" -gt "$max" ]]; then
