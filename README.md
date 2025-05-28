@@ -37,7 +37,7 @@
         workflows_keep_keyword: lede          清理workflows时候保留关键字符名称的runs不清理（lede 改成你需要的关键字符,不需要的就不附加此项）
         workflows_keep_latest: 90             清理workflows时候排除关键字符runs外，再保留N个时间靠前的runs不清理
         max_workflows_fetch: 200              一次最多检查多少个workflows，进行清理，设置太多的话，清理时间过长，或者会出现超时情况，按100倍数增加，最高可以设置1000（比如100、200、300...800、900、1000）
-        repo: ${{ github.repository }}        清理仓库设置，${{ github.repository }} 默认为本仓库
+        repo: ${{ github.repository }}        清理仓库设置，默认为您启动本程序的自身仓库
         gh_token: ${{ secrets.REPO_TOKEN }}   GITHUB_TOKEN，仓库密匙，必须存在
 ```
 
