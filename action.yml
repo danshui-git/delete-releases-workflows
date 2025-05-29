@@ -87,8 +87,8 @@ runs:
 
         # 验证必需参数
         [[ -z "${gh_token}" ]] && error_msg "必须附加[ gh_token ]参数，且参数为正确密钥"
-        [[ -z "${delete_releases}" ]] && error_msg "必须附加[ delete_releases ]参数，且参数设置为"
-        [[ -z "${delete_workflows}" ]] && error_msg "必须附加[ delete_workflows ]参数，且参数设置为"
+        [[ -z "${delete_releases}" ]] && error_msg "必须附加[ delete_releases ]参数，且参数设置为 'true' 或 'false'"
+        [[ -z "${delete_workflows}" ]] && error_msg "必须附加[ delete_workflows ]参数，且参数设置为 'true' 或 'false'"
         [[ ! -f "del.sh" ]] && error_msg "找不到[del.sh]文件，或服务器路径发生错误改变导致不能正确运行[del.sh]"
 
         # 构建命令行参数
