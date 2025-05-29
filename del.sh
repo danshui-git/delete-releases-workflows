@@ -7,7 +7,7 @@ github_max_page="100"  # 最大请求页数
 # 设置字体颜色
 STEPS="[\033[95m 步骤 \033[0m]"
 INFO="[\033[94m 信息 \033[0m]"
-NOTE="[\033[93m 注意 \033[0m]"
+NOTE="[\033[93m 结果 \033[0m]"
 ERROR="[\033[91m 错误 \033[0m]"
 SUCCESS="[\033[92m 成功 \033[0m]"
 
@@ -22,7 +22,7 @@ error_msg() {
 validate_boolean() {
     local var="$1" param_name="$2"
     if [[ ! "$var" =~ ^(true|false)$ ]]; then
-        error_msg "参数 $param_name 的值无效: $var 必须是 'true' 或 'false'"
+        error_msg "参数 $param_name 的值: $var 无效，必须是 'true' 或 'false'"
     fi
 }
 
@@ -30,7 +30,7 @@ validate_boolean() {
 validate_prerelease() {
     local var="$1" param_name="$2"
     if [[ ! "$var" =~ ^(true|false|all)$ ]]; then
-        error_msg "参数 $param_name 的值无效: $var 必须是 'true', 'false' 或 'all'."
+        error_msg "参数 $param_name 的值: $var 无效，必须是 'true', 'false' 或 'all'."
     fi
 }
 
@@ -38,10 +38,10 @@ validate_prerelease() {
 validate_positive_integer() {
     local var="$1" param_name="$2" max="$3"
     if ! [[ "$var" =~ ^[0-9][0-9]*$ ]]; then
-        error_msg "参数 $param_name 的值无效: $var 必须是正整数"
+        error_msg "参数 $param_name 的值: $var 无效，必须是正整数"
     fi
     if [[ "$var" -gt "$max" ]]; then
-        error_msg "参数 $param_name 的值无效: $var 最大值为 $max"
+        error_msg "参数 $param_name 的值: $var 无效，最大值为 $max"
     fi
 }
 
@@ -185,16 +185,16 @@ init_var() {
     echo -e ""
     echo -e "${INFO} 仓库: [ ${repo} ]"
     echo -e "${INFO} 删除发布: [ ${delete_releases} ]"
-    echo -e "${INFO} 删除标签: [ ${delete_tags} ]"
-    echo -e "${INFO} 预发布选项: [ ${prerelease_option} ]"
+    echo -e "${INFO} 删除发布标签: [ ${delete_tags} ]"
+    echo -e "${INFO} 预发版选项: [ ${prerelease_option} ]"
     echo -e "${INFO} 保留最新发布数量: [ ${releases_keep_latest} ]"
     echo -e "${INFO} 保留发布关键词: [ $(echo ${releases_keep_keyword[@]} | xargs) ]"
-    echo -e "${INFO} 最大获取发布数量: [ ${max_releases_fetch} ]"
+    echo -e "${INFO} 获取最大发布数量: [ ${max_releases_fetch} ]"
     echo -e "${INFO} 删除工作流: [ ${delete_workflows} ]"
     echo -e "${INFO} 保留最新工作流数量: [ ${workflows_keep_latest} ]"
     echo -e "${INFO} 保留工作流关键词: [ $(echo ${workflows_keep_keyword[@]} | xargs) ]"
-    echo -e "${INFO} 最大获取工作流数量: [ ${max_workflows_fetch} ]"
-    echo -e "${INFO} 输出日志: [ ${out_log} ]"
+    echo -e "${INFO} 获取最大工作流数量: [ ${max_workflows_fetch} ]"
+    echo -e "${INFO} 日志输出: [ ${out_log} ]"
     echo -e ""
 }
 
@@ -264,13 +264,13 @@ get_releases_list() {
 
         # 打印结果日志
         actual_count=$(cat "${all_releases_list}" | wc -l)
-        echo -e "${INFO} (1.3.1) api.github.com 发布请求成功。"
-        echo -e "${INFO} (1.3.2) 获取的总发布数量: [ ${actual_count} / ${max_releases_fetch} ]"
+        echo -e "${INFO} (1.3.1) 获取发布信息请求成功。"
+        echo -e "${INFO} (1.3.2) 获取到的总发布数量: [ ${actual_count} / ${max_releases_fetch} ]"
         [[ "${out_log}" == "true" ]] && {
             echo -e "${INFO} (1.3.3) 所有发布列表:\n$(cat ${all_releases_list})"
         }
     else
-        echo -e "${NOTE} (1.3.4) 发布列表为空。跳过。"
+        echo -e "${NOTE} (1.3.4) 发布列表为空，跳过。"
     fi
 }
 
@@ -280,19 +280,17 @@ out_releases_list() {
     if [[ -s "${all_releases_list}" ]]; then
         # 根据预发布选项过滤(all/false/true)
         if [[ "${prerelease_option}" == "all" ]]; then
-            echo -e "${NOTE} (1.4.1) 不过滤预发布选项。跳过。"
+            echo -e "${NOTE} (1.4.1) 不过滤预发布选项，检查全部发布信息。"
         elif [[ "${prerelease_option}" == "false" ]]; then
-            echo -e "${INFO} (1.4.2) 过滤预发布选项: [ false ]"
+            echo -e "${INFO} (1.4.2) 过滤预发版选项: [ false ]"
             cat ${all_releases_list} | jq -r '.prerelease' | grep -w "true" | while read line; do sed -i "/${line}/d" ${all_releases_list}; done
         elif [[ "${prerelease_option}" == "true" ]]; then
-            echo -e "${INFO} (1.4.3) 过滤预发布选项: [ true ]"
+            echo -e "${INFO} (1.4.3) 过滤预发版选项: [ true ]"
             cat ${all_releases_list} | jq -r '.prerelease' | grep -w "false" | while read line; do sed -i "/${line}/d" ${all_releases_list}; done
-        else
-            error_msg "预发布选项无效 [ ${prerelease_option} ]!"
         fi
         [[ "${out_log}" == "true" ]] && echo -e "${INFO} (1.4.4) 当前发布列表:\n$(cat ${all_releases_list})"
     else
-        echo -e "${NOTE} (1.4.5) 发布列表为空。跳过。"
+        echo -e "${NOTE} (1.4.5) 发布列表为空，跳过。"
     fi
 
     # 匹配需要过滤的标签
@@ -316,7 +314,7 @@ out_releases_list() {
         # 过滤后的剩余标签列表
         [[ "${out_log}" == "true" ]] && echo -e "${INFO} (1.5.4) 当前发布列表:\n$(cat ${all_releases_list})"
     else
-        echo -e "${NOTE} (1.5.5) 过滤关键词为空。跳过。"
+        echo -e "${NOTE} (1.5.5) 过滤关键词为空，跳过。"
     fi
 
     # 匹配需要保留的最新标签
@@ -336,14 +334,14 @@ out_releases_list() {
             sed -i "1,${releases_keep_latest}d" ${all_releases_list}
         fi
     else
-        echo -e "${NOTE} (1.6.4) 发布列表为空。跳过。"
+        echo -e "${NOTE} (1.6.4) 发布列表为空，跳过。"
     fi
 
     # 删除列表
     if [[ -s "${all_releases_list}" ]]; then
         [[ "${out_log}" == "true" ]] && echo -e "${INFO} (1.6.5) 删除发布列表:\n$(cat ${all_releases_list})"
     else
-        echo -e "${NOTE} (1.6.6) 删除发布列表为空。跳过。"
+        echo -e "${NOTE} (1.6.6) 删除发布列表为空，跳过。"
     fi
 
     echo -e ""
@@ -376,7 +374,7 @@ del_releases_file() {
         done
         echo -e "${SUCCESS} (1.7.4) 发布删除完成"
     else
-        echo -e "${NOTE} (1.7.5) 没有需要删除的发布。跳过。"
+        echo -e "${NOTE} (1.7.5) 没有需要删除的发布，跳过。"
     fi
 
     echo -e ""
@@ -409,7 +407,7 @@ del_releases_tags() {
         done
         echo -e "${SUCCESS} (1.8.4) 标签删除完成"
     else
-        echo -e "${NOTE} (1.8.5) 没有需要删除的标签。跳过。"
+        echo -e "${NOTE} (1.8.5) 没有需要删除的标签，跳过。"
     fi
 
     echo -e ""
@@ -479,13 +477,13 @@ get_workflows_list() {
 
         # 打印结果日志
         actual_count=$(cat "${all_workflows_list}" | wc -l)
-        echo -e "${INFO} (2.3.1) api.github.com 工作流请求成功。"
-        echo -e "${INFO} (2.3.2) 获取的总工作流数量: [ ${actual_count} / ${max_workflows_fetch} ]"
+        echo -e "${INFO} (2.3.1) 获取工作流信息请求成功。"
+        echo -e "${INFO} (2.3.2) 获取到的总工作流数量: [ ${actual_count} / ${max_workflows_fetch} ]"
         [[ "${out_log}" == "true" ]] && {
             echo -e "${INFO} (2.3.3) 所有工作流运行列表:\n$(cat ${all_workflows_list})"
         }
     else
-        echo -e "${NOTE} (2.3.4) 工作流列表为空。跳过。"
+        echo -e "${NOTE} (2.3.4) 工作流列表为空，跳过。"
     fi
 }
 
@@ -514,7 +512,7 @@ out_workflows_list() {
         # 关键词过滤后的剩余工作流列表
         [[ "${out_log}" == "true" ]] && echo -e "${INFO} (2.4.4) 当前工作流运行列表:\n$(cat ${all_workflows_list})"
     else
-        echo -e "${NOTE} (2.4.5) 过滤关键词为空。跳过。"
+        echo -e "${NOTE} (2.4.5) 过滤关键词为空，跳过。"
     fi
 
     # 生成需要保留的工作流列表
@@ -537,14 +535,14 @@ out_workflows_list() {
             sed -i "1,${workflows_keep_latest}d" ${all_workflows_list}
         fi
     else
-        echo -e "${NOTE} (2.5.4) 工作流运行列表为空。跳过。"
+        echo -e "${NOTE} (2.5.4) 工作流运行列表为空，跳过。"
     fi
 
     # 删除列表
     if [[ -s "${all_workflows_list}" ]]; then
         [[ "${out_log}" == "true" ]] && echo -e "${INFO} (2.5.5) 删除工作流列表:\n$(cat ${all_workflows_list})"
     else
-        echo -e "${NOTE} (2.5.6) 删除工作流列表为空。跳过。"
+        echo -e "${NOTE} (2.5.6) 删除工作流列表为空，跳过。"
     fi
 
     echo -e ""
@@ -577,7 +575,7 @@ del_workflows_runs() {
         done
         echo -e "${SUCCESS} (2.6.4) 工作流运行删除完成"
     else
-        echo -e "${NOTE} (2.6.5) 没有需要删除的工作流运行。跳过。"
+        echo -e "${NOTE} (2.6.5) 没有需要删除的工作流运行，跳过。"
     fi
 
     echo -e ""
