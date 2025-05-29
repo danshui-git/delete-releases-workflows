@@ -78,7 +78,7 @@ runs:
         out_log="${{ inputs.out_log }}"
         repo="${{ inputs.repo }}"
 
-        # 错误提示颜色
+        # 错误提示字体颜色
         ERROR="[\033[91m ERROR \033[0m]"
         error_msg() {
             echo -e "${ERROR} ${1}"
