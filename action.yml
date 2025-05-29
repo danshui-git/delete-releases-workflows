@@ -86,10 +86,10 @@ runs:
         }
 
         # 验证必需参数
-        [[ -z "${gh_token}" ]] && error_msg "Please set the token: [ gh_token ]."
-        [[ -z "${delete_releases}" ]] && error_msg "Please set whether to delete releases."
-        [[ -z "${delete_workflows}" ]] && error_msg "Please set whether to delete workflows."
-        [[ ! -f "del.sh" ]] && error_msg "del.sh file not found in the current directory."
+        [[ -z "${gh_token}" ]] && error_msg "必须附加[ gh_token ]参数，且参数为正确密钥"
+        [[ -z "${delete_releases}" ]] && error_msg "必须附加[ delete_releases ]参数，且参数设置为"
+        [[ -z "${delete_workflows}" ]] && error_msg "必须附加[ delete_workflows ]参数，且参数设置为"
+        [[ ! -f "del.sh" ]] && error_msg "找不到[del.sh]文件，或服务器路径发生错误改变导致不能正确运行[del.sh]"
 
         # 构建命令行参数
         make_command=""
