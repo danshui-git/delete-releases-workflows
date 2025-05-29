@@ -42,6 +42,10 @@ inputs:
     description: "Keywords for keep workflows"
     required: false
     default: ""
+  max_workflows_fetch:
+    description: "Maximum number of workflow runs to fetch in total"
+    required: false
+    default: "200"
   out_log:
     description: "Output a list log for each step"
     required: false
@@ -50,10 +54,6 @@ inputs:
     description: "Set the token"
     required: true
     default: ""
-  max_workflows_fetch:
-    description: "Maximum number of workflow runs to fetch in total"
-    required: false
-    default: "200"
 
 runs:
   using: "composite"
