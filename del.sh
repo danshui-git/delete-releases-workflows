@@ -33,7 +33,6 @@ INFO="[\033[94m 信息 \033[0m]"
 NOTE="[\033[93m 结果 \033[0m]"
 ERROR="[\033[91m 错误 \033[0m]"
 SUCCESS="[\033[92m 成功 \033[0m]"
-
 error_msg() {
     echo -e "${ERROR} ${1}"
     exit 1
