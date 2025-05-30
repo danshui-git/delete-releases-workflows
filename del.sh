@@ -1,27 +1,15 @@
 #!/usr/bin/env bash
-#==============================================================================================
-#
-# Function: Delete older releases and workflow runs
-# Copyright (C) 2023- https://github.com/ophub/delete-releases-workflows
-# Use api.github.com official documentation
-# https://docs.github.com/en/rest/releases/releases?list-releases
-# https://docs.github.com/en/rest/actions/workflow-runs?list-workflow-runs-for-a-repository
-#
-#======================================= Functions list =======================================
-#
-# error_msg           : Output error message
-# init_var            : Initialize all variables
-#
-# get_releases_list   : Get the release list
-# out_releases_list   : Output the release list
-# del_releases_file   : Delete releases files
-# del_releases_tags   : Delete releases tags
-#
-# get_workflows_list  : Get the workflows list
-# out_workflows_list  : Output the workflows list
-# del_workflows_runs  : Delete workflows runs
-#
-#=============================== Set make environment variables ===============================
+
+# ---
+# 用于编译openwrt时，删除旧发布和旧的工作流
+# 原作者: ophub
+# 相关链接: https://github.com/ophub/delete-releases-workflows
+# ---
+# 由281677160二次修改，修改内容如下
+# 1、改进参数传递和检测
+# 2、修改保留工作流，原保留天数改成保留时间靠前的个数
+# 3、增加每次检测工作流或者发布的总数量,避免一次删除过多造成时间过长
+# ---
 
 # 设置默认值
 github_per_page="100"  # 每次请求获取的数量
