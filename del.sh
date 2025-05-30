@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # ---
-# 用于编译openwrt时，删除旧发布和旧的工作流
+# 用于GitHub，删除旧发布和旧的工作流
 # 原作者: ophub
 # 相关链接: https://github.com/ophub/delete-releases-workflows
 # ---
