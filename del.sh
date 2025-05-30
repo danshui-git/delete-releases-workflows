@@ -40,7 +40,7 @@ error_msg() {
     exit 1
 }
 
-# 验证布尔值
+# 验证开关值
 validate_boolean() {
     local var="$1" param_name="$2"
     if [[ ! "$var" =~ ^(true|false)$ ]]; then
