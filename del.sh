@@ -26,7 +26,7 @@ SUCCESS="[\033[92m 成功 \033[0m]"
 
 error_msg() {
     echo -e "${ERROR} ${1}"
-    exit 0
+    exit 1
 }
 
 # 验证布尔值
@@ -97,6 +97,12 @@ init_var() {
     validate_positive_integer "$max_releases_fetch" "max_releases_fetch" 1000
     validate_positive_integer "$max_workflows_fetch" "max_workflows_fetch" 1000
     
+    # 创建临时目录
+    tmp_dir=$(mktemp -d)
+    if [[ ! -d "$tmp_dir" ]]; then
+        error_msg "无法创建临时目录"
+    fi
+    
     echo -e ""
     echo -e "${INFO} repo: [ ${repo} ]"
     echo -e "${INFO} delete_releases: [ ${delete_releases} ]"
@@ -117,7 +123,7 @@ get_releases_list() {
     echo -e "${STEPS} 开始查询发布列表..."
 
     # 创建文件存储结果
-    all_releases_list="json_api_releases"
+    all_releases_list="${tmp_dir}/json_api_releases"
     echo -n "" >"${all_releases_list}"
     
     # 计算需要请求的总页数
@@ -198,7 +204,7 @@ out_releases_list() {
     fi
 
     # 根据预发布选项过滤(all/false/true)
-    filtered_releases_list="json_filtered_releases"
+    filtered_releases_list="${tmp_dir}/json_filtered_releases"
     cp "${all_releases_list}" "${filtered_releases_list}"
     
     if [[ "${prerelease_option}" == "all" ]]; then
@@ -218,7 +224,7 @@ out_releases_list() {
         echo -e "${INFO} (1.5.1) 发布的过滤标签关键词: [ $(echo ${releases_keep_keyword[@]} | xargs) ]"
         
         # 创建临时文件存储需要保留的标签
-        keep_releases_keyword_list="json_keep_releases_keyword_list"
+        keep_releases_keyword_list="${tmp_dir}/json_keep_releases_keyword_list"
         echo -n "" > "${keep_releases_keyword_list}"
         
         # 提取包含关键词的标签
@@ -231,7 +237,7 @@ out_releases_list() {
             [[ "${out_log}" == "true" ]] && echo -e "${INFO} (1.5.2) 符合条件的发布标签列表:\n$(cat ${keep_releases_keyword_list} | jq -c '.')"
             
             # 从完整列表中删除包含关键词的标签
-            filtered_releases="json_filtered_releases"
+            filtered_releases="${tmp_dir}/json_filtered_releases"
             jq -c --argjson keep "$(cat ${keep_releases_keyword_list})" 'select(.id as $id | $keep | map(.id) | index($id) | not)' "${all_releases_list}" > "${filtered_releases}"
             mv "${filtered_releases}" "${all_releases_list}"
             
@@ -241,24 +247,24 @@ out_releases_list() {
             echo -e "${NOTE} (1.5.5) 没有找到符合关键词的发布标签，跳过"
         fi
     else
-        echo -e "${NOTE} (1.5.5) 过滤关键词为空，跳过"
+        echo -e "${NOTE} (1.5.6) 过滤关键词为空，跳过"
     fi
 
     # 匹配需要保留的最新标签
     if [[ -s "${all_releases_list}" ]]; then
         if [[ "${releases_keep_latest}" -eq "0" ]]; then
             echo -e "${INFO} (1.6.1) 删除所有发布"
-            cp "${all_releases_list}" "json_delete_releases"
+            cp "${all_releases_list}" "${tmp_dir}/json_delete_releases"
         else
             # 按时间排序并保留最新的N个
-            keep_releases_list="json_keep_releases_list"
+            keep_releases_list="${tmp_dir}/json_keep_releases_list"
             jq -s 'sort_by(.date | fromdateiso8601) | reverse | .[0:'${releases_keep_latest}']' "${all_releases_list}" > "${keep_releases_list}"
             
             echo -e "${INFO} (1.6.2) 保留最新的 ${releases_keep_latest} 个发布"
             [[ "${out_log}" == "true" ]] && echo -e "${INFO} (1.6.3) 保留发布列表:\n$(cat ${keep_releases_list} | jq -c '.[]')"
             
             # 生成删除列表（排除保留的发布）
-            delete_releases_list="json_delete_releases"
+            delete_releases_list="${tmp_dir}/json_delete_releases"
             jq -s --argjson keep "$(cat ${keep_releases_list})" 'map(select(.id as $id | $keep | map(.id) | index($id) | not))' "${all_releases_list}" > "${delete_releases_list}"
             
             if [[ -s "${delete_releases_list}" ]]; then
@@ -278,14 +284,14 @@ del_releases_file() {
     echo -e "${STEPS} 开始删除发布文件..."
 
     # 删除发布
-    delete_releases_list="json_delete_releases"
-    if [[ -s "${delete_releases_list}" && -n "$(cat ${delete_releases_list} | jq -r .id)" ]]; then
-        total=$(cat ${delete_releases_list} | jq -s 'length')
+    delete_releases_list="${tmp_dir}/json_delete_releases"
+    if [[ -s "${delete_releases_list}" && -n "$(jq -r '.[].id' ${delete_releases_list} 2>/dev/null)" ]]; then
+        total=$(jq -s 'length' "${delete_releases_list}")
         count=0
         
         echo -e "${INFO} (1.7.1) 总共需要删除 ${total} 个发布"
         
-        cat ${delete_releases_list} | jq -r .id | while read release_id; do
+        jq -r '.[].id' "${delete_releases_list}" | while read release_id; do
             count=$((count + 1))
             echo -e "${INFO} (1.7.1) 正在删除发布 ${count}/${total} (ID=${release_id})"
             
@@ -315,14 +321,14 @@ del_releases_tags() {
     echo -e "${STEPS} 开始删除发布的关联标签..."
 
     # 删除与发布关联的标签
-    delete_releases_list="json_delete_releases"
-    if [[ "${delete_tags}" == "true" && -s "${delete_releases_list}" && -n "$(cat ${delete_releases_list} | jq -r .tag_name)" ]]; then
-        total=$(cat ${delete_releases_list} | jq -s 'length')
+    delete_releases_list="${tmp_dir}/json_delete_releases"
+    if [[ "${delete_tags}" == "true" && -s "${delete_releases_list}" && -n "$(jq -r '.[].tag_name' ${delete_releases_list} 2>/dev/null)" ]]; then
+        total=$(jq -s 'length' "${delete_releases_list}")
         count=0
         
         echo -e "${INFO} (1.8.1) 总共需要删除 ${total} 个关联标签"
         
-        cat ${delete_releases_list} | jq -r .tag_name | while read tag_name; do
+        jq -r '.[].tag_name' "${delete_releases_list}" | while read tag_name; do
             count=$((count + 1))
             echo -e "${INFO} (1.8.1) 正在删除标签 ${count}/${total} (${tag_name})"
             
@@ -332,7 +338,7 @@ del_releases_tags() {
                 -H "Accept: application/vnd.github+json" \
                 -H "X-GitHub-Api-Version: 2022-11-28" \
                 "https://api.github.com/repos/${repo}/git/refs/tags/${tag_name}"
-                )
+            )
                 
             if [[ "$response" -eq 204 ]]; then
                 echo -e "${SUCCESS} (1.8.2) 标签 ${count}/${total}：${tag_name} 删除成功"
@@ -353,7 +359,7 @@ get_workflows_list() {
     echo -e "${STEPS} 开始查询工作流列表..."
 
     # 创建文件存储结果
-    all_workflows_list="json_api_workflows"
+    all_workflows_list="${tmp_dir}/json_api_workflows"
     echo -n "" >"${all_workflows_list}"
     
     # 计算需要请求的总页数
@@ -433,14 +439,14 @@ out_workflows_list() {
     fi
 
     # 剔除包含关键词的工作流
-    filtered_workflows_list="json_filtered_workflows"
+    filtered_workflows_list="${tmp_dir}/json_filtered_workflows"
     cp "${all_workflows_list}" "${filtered_workflows_list}"
     
     if [[ "${#workflows_keep_keyword[@]}" -ge "1" ]]; then
         echo -e "${INFO} (2.4.1) 工作流过滤关键词: [ $(echo ${workflows_keep_keyword[@]} | xargs) ]"
         
         # 创建临时文件存储需要保留的工作流
-        keep_workflows_keyword_list="json_keep_workflows_keyword_list"
+        keep_workflows_keyword_list="${tmp_dir}/json_keep_workflows_keyword_list"
         echo -n "" > "${keep_workflows_keyword_list}"
         
         # 提取包含关键词的工作流
@@ -465,17 +471,17 @@ out_workflows_list() {
     if [[ -s "${all_workflows_list}" ]]; then
         if [[ "${workflows_keep_latest}" -eq "0" ]]; then
             echo -e "${INFO} (2.5.1) 删除所有工作流"
-            cp "${all_workflows_list}" "json_delete_workflows_list"
+            cp "${all_workflows_list}" "${tmp_dir}/json_delete_workflows_list"
         else
             # 按时间排序并保留最新的N个
-            keep_workflows_list="json_keep_workflows_list"
+            keep_workflows_list="${tmp_dir}/json_keep_workflows_list"
             jq -s 'sort_by(.date | fromdateiso8601) | reverse | .[0:'${workflows_keep_latest}']' "${all_workflows_list}" > "${keep_workflows_list}"
             
             echo -e "${INFO} (2.5.2) 保留最新的 ${workflows_keep_latest} 个工作流"
             [[ "${out_log}" == "true" ]] && echo -e "${INFO} (2.5.3) 保留工作流列表:\n$(cat ${keep_workflows_list} | jq -c '.[]')"
             
             # 生成删除列表（排除保留的工作流）
-            delete_workflows_list="json_delete_workflows_list"
+            delete_workflows_list="${tmp_dir}/json_delete_workflows_list"
             jq -s --argjson keep "$(cat ${keep_workflows_list})" 'map(select(.id as $id | $keep | map(.id) | index($id) | not))' "${all_workflows_list}" > "${delete_workflows_list}"
             
             if [[ -s "${delete_workflows_list}" ]]; then
@@ -493,14 +499,14 @@ out_workflows_list() {
 del_workflows_runs() {
     echo -e "${STEPS} 开始删除工作流..."
 
-    delete_workflows_list="json_delete_workflows_list"
-    if [[ -s "${delete_workflows_list}" ]]; then
-        total=$(cat ${delete_workflows_list} | jq -s 'length')
+    delete_workflows_list="${tmp_dir}/json_delete_workflows_list"
+    if [[ -s "${delete_workflows_list}" && -n "$(jq -r '.[].id' ${delete_workflows_list} 2>/dev/null)" ]]; then
+        total=$(jq -s 'length' "${delete_workflows_list}")
         count=0
 
         echo -e "${INFO} (2.6.1) 总共需要删除 ${total} 个工作流"
         
-        cat ${delete_workflows_list} | jq -r '.id' | while read run_id; do
+        jq -r '.[].id' "${delete_workflows_list}" | while read run_id; do
             count=$((count + 1))
             echo -e "${INFO} (2.6.1) 正在删除工作流 ${count}/${total} (ID=${run_id})"
             
@@ -524,6 +530,12 @@ del_workflows_runs() {
     fi
 }
 
+# 清理临时文件
+cleanup() {
+    if [[ -d "${tmp_dir}" ]]; then
+        rm -rf "${tmp_dir}"
+    fi
+}
 
 # 显示欢迎信息
 echo -e "${INFO} 欢迎使用删除旧发布和工作流工具!"
@@ -550,4 +562,5 @@ else
     echo -e "${STEPS} 不启用删除工作流"
 fi
 
-wait
+# 清理临时文件
+cleanup
