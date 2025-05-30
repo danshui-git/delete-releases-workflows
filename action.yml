@@ -64,6 +64,7 @@ runs:
         cd "$GITHUB_ACTION_PATH"
 
         # 所有应用参数，同时删除空白字符
+        gh_token="${{ inputs.gh_token }}"
         delete_releases="${{ inputs.delete_releases//[[:space:]]/ }}"
         delete_tags="${{ inputs.delete_tags//[[:space:]]/ }}"
         prerelease_option="${{ inputs.prerelease_option//[[:space:]]/ }}"
