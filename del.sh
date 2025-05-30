@@ -220,7 +220,7 @@ get_releases_list() {
                 -H "Authorization: Bearer ${gh_token}" \
                 -H "Accept: application/vnd.github+json" \
                 -H "X-GitHub-Api-Version: 2022-11-28" \
-                "https://api.github.com/repos/  ${repo}/releases?per_page=${github_per_page}&page=${page}"
+                "https://api.github.com/repos/${repo}/releases?per_page=${github_per_page}&page=${page}"
         )" || {
             echo -e "${ERROR} 从GitHub API获取发布失败 (第 $page 页)"
             break
@@ -366,7 +366,8 @@ del_releases_file() {
                 -H "Authorization: Bearer ${gh_token}" \
                 -H "Accept: application/vnd.github+json" \
                 -H "X-GitHub-Api-Version: 2022-11-28" \
-                "https://api.github.com/repos/  ${repo}/releases/${release_id}")
+                "https://api.github.com/repos/${repo}/releases/${release_id}"
+            )
                 
             if [[ "$response" -eq 204 ]]; then
                 echo -e "${SUCCESS} (1.7.2) 发布 ${count}/${total} 删除成功"
@@ -399,7 +400,8 @@ del_releases_tags() {
                 -H "Authorization: Bearer ${gh_token}" \
                 -H "Accept: application/vnd.github+json" \
                 -H "X-GitHub-Api-Version: 2022-11-28" \
-                "https://api.github.com/repos/  ${repo}/git/refs/tags/${tag_name}")
+                "https://api.github.com/repos/${repo}/git/refs/tags/${tag_name}"
+                )
                 
             if [[ "$response" -eq 204 ]]; then
                 echo -e "${SUCCESS} (1.8.2) 标签 ${count}/${total} 删除成功"
@@ -437,7 +439,7 @@ get_workflows_list() {
                 -H "Authorization: Bearer ${gh_token}" \
                 -H "Accept: application/vnd.github+json" \
                 -H "X-GitHub-Api-Version: 2022-11-28" \
-                "https://api.github.com/repos/  ${repo}/actions/runs?per_page=${github_per_page}&page=${page}"
+                "https://api.github.com/repos/${repo}/actions/runs?per_page=${github_per_page}&page=${page}"
         )" || {
             echo -e "${ERROR} 从GitHub API获取工作流失败 (第 $page 页)"
             break
@@ -567,7 +569,8 @@ del_workflows_runs() {
                 -H "Authorization: Bearer ${gh_token}" \
                 -H "Accept: application/vnd.github+json" \
                 -H "X-GitHub-Api-Version: 2022-11-28" \
-                "https://api.github.com/repos/  ${repo}/actions/runs/${run_id}")
+                "https://api.github.com/repos/${repo}/actions/runs/${run_id}"
+                )
                 
             if [[ "$response" -eq 204 ]]; then
                 echo -e "${SUCCESS} (2.6.2) 工作流运行 ${count}/${total} 删除成功"
