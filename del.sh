@@ -329,6 +329,7 @@ del_releases_tags() {
     echo -e ""
 }
 
+# 获取工作流列表
 get_workflows_list() {
     echo -e "${STEPS} 开始查询工作流列表..."
 
@@ -370,13 +371,13 @@ get_workflows_list() {
         # 限制本次处理的数量
         if [[ "$get_results_length" -gt "$remaining" ]]; then
             echo "${response}" |
-                jq -c ".workflow_runs[0:'$remaining'] | select(.status != \"in_progress\") | {date: .updated_at, id: .id, name: .name}" \
+                jq -c ".workflow_runs[0:$remaining] | map({date: .updated_at, id: .id, name: .name})" \
                     >>"${all_workflows_list}"
             current_count=$(( current_count + remaining ))
             break
         else
             echo "${response}" |
-                jq -c '.workflow_runs[] | select(.status != "in_progress") | {date: .updated_at, id: .id, name: .name}' \
+                jq -c '.workflow_runs[] | {date: .updated_at, id: .id, name: .name}' \
                     >>"${all_workflows_list}"
             current_count=$(( current_count + get_results_length ))
         fi
@@ -403,99 +404,82 @@ get_workflows_list() {
     fi
 }
 
+# 输出工作流列表
 out_workflows_list() {
     echo -e "${STEPS} 开始输出工作流列表..."
 
-    # 需要保留的包含关键词的工作流
-    keep_keyword_workflows_list="json_keep_keyword_workflows_list"
-    # 移除匹配关键词需要保留的工作流
-    if [[ "${#workflows_keep_keyword[@]}" -ge "1" && -s "${all_workflows_list}" ]]; then
-        # 匹配符合关键词的工作流列表
-        echo -e "${INFO} (2.4.1) 工作流过滤关键词: [ $(echo ${workflows_keep_keyword[@]} | xargs) ]"
-        for keyword in "${workflows_keep_keyword[@]}"; do
-            cat ${all_workflows_list} | jq -r '.name' | grep -E "${keyword}" >>${keep_keyword_workflows_list}
-        done
-        [[ "${out_log}" == "true" && -s "${keep_keyword_workflows_list}" ]] && {
-            echo -e "${INFO} (2.4.2) 符合条件的工作流列表:\n$(cat ${keep_keyword_workflows_list})"
-        }
-
-        # 移除需要保留的工作流
-        [[ -s "${keep_keyword_workflows_list}" ]] && {
-            cat ${keep_keyword_workflows_list} | while read line; do sed -i "/${line}/d" ${all_workflows_list}; done
-            echo -e "${INFO} (2.4.3) 工作流关键词过滤成功"
-        }
-
-        # 关键词过滤后的剩余工作流列表
-        [[ "${out_log}" == "true" ]] && echo -e "${INFO} (2.4.4) 当前工作流运行列表:\n$(cat ${all_workflows_list})"
-    else
-        echo -e "${NOTE} (2.4.5) 工作流关键词过滤为空，跳过"
+    if [[ ! -s "${all_workflows_list}" ]]; then
+        echo -e "${NOTE} 工作流列表为空，跳过"
+        return
     fi
 
-    # 生成需要保留的工作流列表
-    keep_workflows_list="json_keep_workflows_list"
-    if [[ -s "${all_workflows_list}" ]]; then
-        if [[ "${workflows_keep_latest}" -eq "0" ]]; then
-            echo -e "${INFO} (2.5.1) 删除所有工作流"
-        else
-            # 按日期排序并保留最新的工作流
-            cat ${all_workflows_list} | jq -s 'sort_by(.date | fromdateiso8601) | reverse' >${keep_workflows_list}
-            head -n ${workflows_keep_latest} ${keep_workflows_list} >${keep_workflows_list}.tmp
-            mv ${keep_workflows_list}.tmp ${keep_workflows_list}
-
-            echo -e "${INFO} (2.5.2) 保留工作流列表生成成功"
-            [[ "${out_log}" == "true" && -s "${keep_workflows_list}" ]] && {
-                echo -e "${INFO} (2.5.3) 保留工作流列表:\n$(cat ${keep_workflows_list})"
-            }
-
-            # 从完整列表中移除需要保留的工作流
-            sed -i "1,${workflows_keep_latest}d" ${all_workflows_list}
-        fi
+    # 剔除包含关键词的工作流
+    keep_keyword_workflows_list="json_keep_keyword_workflows_list"
+    echo -n "" > "${keep_keyword_workflows_list}"
+    if [[ "${#workflows_keep_keyword[@]}" -ge "1" ]]; then
+        echo -e "${INFO} (2.4.1) 工作流过滤关键词: [ $(echo ${workflows_keep_keyword[@]} | xargs) ]"
+        for keyword in "${workflows_keep_keyword[@]}"; do
+            cat "${all_workflows_list}" | jq -r --arg keyword "$keyword" '. | select(.name | contains($keyword) | not)' >> "${keep_keyword_workflows_list}"
+        done
+        mv "${keep_keyword_workflows_list}" "${all_workflows_list}"
+        echo -e "${INFO} (2.4.2) 剔除关键词后的工作流列表:\n$(cat ${all_workflows_list})"
     else
-        echo -e "${NOTE} (2.5.4) 工作流列表为空，跳过"
+        echo -e "${INFO} (2.4.3) 无关键词过滤，保留所有工作流"
+    fi
+
+    # 保留时间靠前的N个工作流
+    keep_workflows_list="json_keep_workflows_list"
+    echo -n "" > "${keep_workflows_list}"
+    if [[ "${workflows_keep_latest}" -gt "0" ]]; then
+        echo -e "${INFO} (2.5.1) 保留时间靠前的 ${workflows_keep_latest} 个工作流"
+        cat "${all_workflows_list}" | jq -s 'sort_by(.date | fromdateiso8601) | reverse | .[:'${workflows_keep_latest}']' > "${keep_workflows_list}"
+        echo -e "${INFO} (2.5.2) 保留工作流列表:\n$(cat ${keep_workflows_list})"
+    else
+        echo -e "${INFO} (2.5.3) 不保留任何工作流"
     fi
 
     # 删除列表
-    if [[ -s "${all_workflows_list}" ]]; then
-        [[ "${out_log}" == "true" ]] && echo -e "${INFO} (2.5.5) 删除工作流列表:\n$(cat ${all_workflows_list})"
+    delete_workflows_list="json_delete_workflows_list"
+    echo -n "" > "${delete_workflows_list}"
+    if [[ -s "${keep_workflows_list}" ]]; then
+        cat "${all_workflows_list}" | jq -s --argjson keep "$(cat "${keep_workflows_list}")" '. | map(select(.id as $id | index($id) | not))' > "${delete_workflows_list}"
+        echo -e "${INFO} (2.5.4) 删除工作流列表:\n$(cat ${delete_workflows_list})"
     else
-        echo -e "${NOTE} (2.5.6) 删除工作流列表为空，跳过"
+        echo -e "${INFO} (2.5.5) 删除工作流列表为空，跳过"
     fi
-
-    echo -e ""
 }
 
+# 删除工作流
 del_workflows_runs() {
     echo -e "${STEPS} 开始删除工作流..."
 
-    # 删除工作流
-    if [[ -s "${all_workflows_list}" && -n "$(cat ${all_workflows_list} | jq -r .id)" ]]; then
-        total=$(cat ${all_workflows_list} | wc -l)
-        count=0
-        
-        cat ${all_workflows_list} | jq -r .id | while read run_id; do
-            count=$((count + 1))
-            echo -e "${INFO} (2.6.1) 正在删除工作流 ${count}/${total}"
-            
-            response=$(curl -s -o /dev/null -w "%{http_code}" \
-                -X DELETE \
-                -H "Authorization: Bearer ${gh_token}" \
-                -H "Accept: application/vnd.github+json" \
-                -H "X-GitHub-Api-Version: 2022-11-28" \
-                "https://api.github.com/repos/${repo}/actions/runs/${run_id}"
-                )
-                
-            if [[ "$response" -eq 204 ]]; then
-                echo -e "${SUCCESS} (2.6.2) 工作流 ${count}：ID=${run_id} 删除成功"
-            else
-                echo -e "${ERROR} (2.6.3) 删除工作流 ${count}：ID=${run_id} 失败: HTTP ${response}"
-            fi
-        done
-        echo -e "${SUCCESS} (2.6.4) 工作流删除完成"
-    else
-        echo -e "${NOTE} (2.6.5) 没有需要删除的工作流，跳过"
+    if [[ ! -s "${delete_workflows_list}" ]]; then
+        echo -e "${NOTE} 没有需要删除的工作流，跳过"
+        return
     fi
 
-    echo -e ""
+    total=$(cat "${delete_workflows_list}" | wc -l)
+    count=0
+
+    cat "${delete_workflows_list}" | jq -r '.id' | while read run_id; do
+        count=$((count + 1))
+        echo -e "${INFO} (2.6.1) 正在删除工作流 ${count}/${total}: ID=${run_id}"
+        
+        response=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X DELETE \
+            -H "Authorization: Bearer ${gh_token}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${repo}/actions/runs/${run_id}"
+        )
+        
+        if [[ "$response" -eq 204 ]]; then
+            echo -e "${SUCCESS} (2.6.2) 工作流 ${count}：ID=${run_id} 删除成功"
+        else
+            echo -e "${ERROR} (2.6.3) 删除工作流 ${count}：ID=${run_id} 失败: HTTP ${response}"
+        fi
+    done
+    echo -e "${SUCCESS} (2.6.4) 工作流删除完成"
 }
 
 # 显示欢迎信息
