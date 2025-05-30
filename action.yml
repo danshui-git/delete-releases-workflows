@@ -85,7 +85,7 @@ runs:
             exit 0
         }
 
-        # 验证必需参数,如果参数为空则会停止整个脚本运行
+        # 验证必需参数,如果参数为空则会停止脚本运行
         [[ -z "${gh_token}" ]] && error_msg "必须设置 [ gh_token ] 参数，且参数为正确密钥"
         [[ -z "${delete_releases}" ]] && error_msg "必须设置 [ delete_releases ] 参数，且参数为 'true' 或 'false'"
         [[ -z "${delete_workflows}" ]] && error_msg "必须设置 [ delete_workflows ] 参数，且参数为 'true' 或 'false'"
