@@ -8,6 +8,7 @@
 # 由281677160二次修改，修改内容如下
 # 1、修改原保留工作流天数,改成保留时间靠前的个数
 # 2、增加每次检测工作流或者发布的总数量,避免一次删除过多造成时间过长
+# 3、统一发布和工作流的处理逻辑，优化列表显示
 # ---
 
 # 设置默认值
@@ -181,7 +182,7 @@ get_releases_list() {
         echo -e "${INFO} (1.3.1) 获取发布信息请求成功"
         echo -e "${INFO} (1.3.2) 获取到的发布量总数: [ ${actual_count} / ${max_releases_fetch} ]"
         [[ "${out_log}" == "true" ]] && {
-            echo -e "${INFO} (1.3.3) 所有发布列表:\n$(cat ${all_releases_list})"
+            echo -e "${INFO} (1.3.3) 所有发布列表:\n$(cat ${all_releases_list} | jq -c '.')"
         }
     else
         echo -e "${NOTE} (1.3.4) 发布列表为空，跳过"
@@ -191,71 +192,83 @@ get_releases_list() {
 out_releases_list() {
     echo -e "${STEPS} 开始输出发布列表..."
 
-    if [[ -s "${all_releases_list}" ]]; then
-        # 根据预发布选项过滤(all/false/true)
-        if [[ "${prerelease_option}" == "all" ]]; then
-            echo -e "${NOTE} (1.4.1) 检查全部发布版本"
-        elif [[ "${prerelease_option}" == "false" ]]; then
-            echo -e "${INFO} (1.4.2) 过滤发布预发版选项: [ false ]"
-            cat ${all_releases_list} | jq -r '.prerelease' | grep -w "true" | while read line; do sed -i "/${line}/d" ${all_releases_list}; done
-        elif [[ "${prerelease_option}" == "true" ]]; then
-            echo -e "${INFO} (1.4.3) 过滤发布预发版选项: [ true ]"
-            cat ${all_releases_list} | jq -r '.prerelease' | grep -w "false" | while read line; do sed -i "/${line}/d" ${all_releases_list}; done
-        fi
-        [[ "${out_log}" == "true" ]] && echo -e "${INFO} (1.4.4) 当前发布列表:\n$(cat ${all_releases_list})"
-    else
+    if [[ ! -s "${all_releases_list}" ]]; then
         echo -e "${NOTE} (1.4.5) 发布列表为空，跳过"
+        return
     fi
 
+    # 根据预发布选项过滤(all/false/true)
+    filtered_releases_list="json_filtered_releases"
+    cp "${all_releases_list}" "${filtered_releases_list}"
+    
+    if [[ "${prerelease_option}" == "all" ]]; then
+        echo -e "${NOTE} (1.4.1) 检查全部发布版本"
+    elif [[ "${prerelease_option}" == "false" ]]; then
+        echo -e "${INFO} (1.4.2) 过滤发布预发版选项: [ false ]"
+        jq -c 'select(.prerelease == false)' "${filtered_releases_list}" > "${all_releases_list}"
+    elif [[ "${prerelease_option}" == "true" ]]; then
+        echo -e "${INFO} (1.4.3) 过滤发布预发版选项: [ true ]"
+        jq -c 'select(.prerelease == true)' "${filtered_releases_list}" > "${all_releases_list}"
+    fi
+    
+    [[ "${out_log}" == "true" ]] && echo -e "${INFO} (1.4.4) 当前发布列表:\n$(cat ${all_releases_list} | jq -c '.')"
+
     # 匹配需要过滤的标签
-    keep_releases_keyword_list="json_keep_releases_keyword_list"
     if [[ "${#releases_keep_keyword[@]}" -ge "1" && -s "${all_releases_list}" ]]; then
-        # 匹配符合条件的标签
         echo -e "${INFO} (1.5.1) 发布的过滤标签关键词: [ $(echo ${releases_keep_keyword[@]} | xargs) ]"
+        
+        # 创建临时文件存储需要保留的标签
+        keep_releases_keyword_list="json_keep_releases_keyword_list"
+        echo -n "" > "${keep_releases_keyword_list}"
+        
+        # 提取包含关键词的标签
         for keyword in "${releases_keep_keyword[@]}"; do
-            cat ${all_releases_list} | jq -r '.tag_name' | grep -E "${keyword}" >>${keep_releases_keyword_list}
+            jq -c --arg keyword "$keyword" 'select(.tag_name | contains($keyword))' "${all_releases_list}" >> "${keep_releases_keyword_list}"
         done
-        [[ "${out_log}" == "true" && -s "${keep_releases_keyword_list}" ]] && {
-            echo -e "${INFO} (1.5.2) 符合条件的发布标签列表:\n$(cat ${keep_releases_keyword_list})"
-        }
-
-        # 移除需要保留的标签
-        [[ -s "${keep_releases_keyword_list}" ]] && {
-            cat ${keep_releases_keyword_list} | while read line; do sed -i "/${line}/d" ${all_releases_list}; done
+        
+        # 如果有关键词匹配的标签，则从列表中删除它们
+        if [[ -s "${keep_releases_keyword_list}" ]]; then
+            [[ "${out_log}" == "true" ]] && echo -e "${INFO} (1.5.2) 符合条件的发布标签列表:\n$(cat ${keep_releases_keyword_list} | jq -c '.')"
+            
+            # 从完整列表中删除包含关键词的标签
+            filtered_releases="json_filtered_releases"
+            jq -c --argjson keep "$(cat ${keep_releases_keyword_list})" 'select(.id as $id | $keep | map(.id) | index($id) | not)' "${all_releases_list}" > "${filtered_releases}"
+            mv "${filtered_releases}" "${all_releases_list}"
+            
             echo -e "${INFO} (1.5.3) 发布的标签关键词过滤成功"
-        }
-
-        # 过滤后的剩余标签列表
-        [[ "${out_log}" == "true" ]] && echo -e "${INFO} (1.5.4) 当前发布列表:\n$(cat ${all_releases_list})"
+            [[ "${out_log}" == "true" ]] && echo -e "${INFO} (1.5.4) 当前发布列表:\n$(cat ${all_releases_list} | jq -c '.')"
+        else
+            echo -e "${NOTE} (1.5.5) 没有找到符合关键词的发布标签，跳过"
+        fi
     else
         echo -e "${NOTE} (1.5.5) 过滤关键词为空，跳过"
     fi
 
     # 匹配需要保留的最新标签
-    keep_releases_list="json_keep_releases_list"
     if [[ -s "${all_releases_list}" ]]; then
         if [[ "${releases_keep_latest}" -eq "0" ]]; then
             echo -e "${INFO} (1.6.1) 删除所有发布"
+            cp "${all_releases_list}" "json_delete_releases"
         else
-            # 生成需要保留的标签列表
-            cat ${all_releases_list} | head -n ${releases_keep_latest} >${keep_releases_list}
-            echo -e "${INFO} (1.6.2) 保留标签列表生成成功"
-            [[ "${out_log}" == "true" && -s "${keep_releases_list}" ]] && {
-                echo -e "${INFO} (1.6.3) 保留标签列表:\n$(cat ${keep_releases_list})"
-            }
-
-            # 从完整列表中移除需要保留的发布
-            sed -i "1,${releases_keep_latest}d" ${all_releases_list}
+            # 按时间排序并保留最新的N个
+            keep_releases_list="json_keep_releases_list"
+            jq -s 'sort_by(.date | fromdateiso8601) | reverse | .[0:'${releases_keep_latest}']' "${all_releases_list}" > "${keep_releases_list}"
+            
+            echo -e "${INFO} (1.6.2) 保留最新的 ${releases_keep_latest} 个发布"
+            [[ "${out_log}" == "true" ]] && echo -e "${INFO} (1.6.3) 保留发布列表:\n$(cat ${keep_releases_list} | jq -c '.[]')"
+            
+            # 生成删除列表（排除保留的发布）
+            delete_releases_list="json_delete_releases"
+            jq -s --argjson keep "$(cat ${keep_releases_list})" 'map(select(.id as $id | $keep | map(.id) | index($id) | not))' "${all_releases_list}" > "${delete_releases_list}"
+            
+            if [[ -s "${delete_releases_list}" ]]; then
+                echo -e "${INFO} (1.6.5) 删除发布列表:\n$(cat ${delete_releases_list} | jq -c '.[]')"
+            else
+                echo -e "${NOTE} (1.6.6) 删除发布列表为空，跳过"
+            fi
         fi
     else
         echo -e "${NOTE} (1.6.4) 发布列表为空，跳过"
-    fi
-
-    # 删除列表
-    if [[ -s "${all_releases_list}" ]]; then
-        [[ "${out_log}" == "true" ]] && echo -e "${INFO} (1.6.5) 删除发布列表:\n$(cat ${all_releases_list})"
-    else
-        echo -e "${NOTE} (1.6.6) 删除发布列表为空，跳过"
     fi
 
     echo -e ""
@@ -265,13 +278,16 @@ del_releases_file() {
     echo -e "${STEPS} 开始删除发布文件..."
 
     # 删除发布
-    if [[ -s "${all_releases_list}" && -n "$(cat ${all_releases_list} | jq -r .id)" ]]; then
-        total=$(cat ${all_releases_list} | wc -l)
+    delete_releases_list="json_delete_releases"
+    if [[ -s "${delete_releases_list}" && -n "$(cat ${delete_releases_list} | jq -r .id)" ]]; then
+        total=$(cat ${delete_releases_list} | jq -s 'length')
         count=0
         
-        cat ${all_releases_list} | jq -r .id | while read release_id; do
+        echo -e "${INFO} (1.7.1) 总共需要删除 ${total} 个发布"
+        
+        cat ${delete_releases_list} | jq -r .id | while read release_id; do
             count=$((count + 1))
-            echo -e "${INFO} (1.7.1) 正在删除发布 ${count}/${total}"
+            echo -e "${INFO} (1.7.1) 正在删除发布 ${count}/${total} (ID=${release_id})"
             
             response=$(curl -s -o /dev/null -w "%{http_code}" \
                 -X DELETE \
@@ -282,9 +298,9 @@ del_releases_file() {
             )
                 
             if [[ "$response" -eq 204 ]]; then
-                echo -e "${SUCCESS} (1.7.2) 发布 ${count}：ID=${release_id} 删除成功"
+                echo -e "${SUCCESS} (1.7.2) 发布 ${count}/${total}：ID=${release_id} 删除成功"
             else
-                echo -e "${ERROR} (1.7.3) 删除发布 ${count}：ID=${release_id} 失败: HTTP ${response}"
+                echo -e "${ERROR} (1.7.3) 删除发布 ${count}/${total}：ID=${release_id} 失败: HTTP ${response}"
             fi
         done
         echo -e "${SUCCESS} (1.7.4) 发布删除完成"
@@ -299,13 +315,16 @@ del_releases_tags() {
     echo -e "${STEPS} 开始删除发布的关联标签..."
 
     # 删除与发布关联的标签
-    if [[ "${delete_tags}" == "true" && -s "${all_releases_list}" && -n "$(cat ${all_releases_list} | jq -r .tag_name)" ]]; then
-        total=$(cat ${all_releases_list} | wc -l)
+    delete_releases_list="json_delete_releases"
+    if [[ "${delete_tags}" == "true" && -s "${delete_releases_list}" && -n "$(cat ${delete_releases_list} | jq -r .tag_name)" ]]; then
+        total=$(cat ${delete_releases_list} | jq -s 'length')
         count=0
         
-        cat ${all_releases_list} | jq -r .tag_name | while read tag_name; do
+        echo -e "${INFO} (1.8.1) 总共需要删除 ${total} 个关联标签"
+        
+        cat ${delete_releases_list} | jq -r .tag_name | while read tag_name; do
             count=$((count + 1))
-            echo -e "${INFO} (1.8.1) 正在删除发布的关联标签 ${count}/${total}"
+            echo -e "${INFO} (1.8.1) 正在删除标签 ${count}/${total} (${tag_name})"
             
             response=$(curl -s -o /dev/null -w "%{http_code}" \
                 -X DELETE \
@@ -316,9 +335,9 @@ del_releases_tags() {
                 )
                 
             if [[ "$response" -eq 204 ]]; then
-                echo -e "${SUCCESS} (1.8.2) 发布的关联标签 ${tag_name} 删除成功"
+                echo -e "${SUCCESS} (1.8.2) 标签 ${count}/${total}：${tag_name} 删除成功"
             else
-                echo -e "${ERROR} (1.8.3) 删除发布的关联标签 ${tag_name} 失败: HTTP ${response}"
+                echo -e "${ERROR} (1.8.3) 删除标签 ${count}/${total}：${tag_name} 失败: HTTP ${response}"
             fi
         done
         echo -e "${SUCCESS} (1.8.4) 发布的关联标签删除完成"
@@ -397,7 +416,7 @@ get_workflows_list() {
         echo -e "${INFO} (2.3.1) 获取工作流信息请求成功"
         echo -e "${INFO} (2.3.2) 获取到的工作流数目总数: [ ${actual_count} / ${max_workflows_fetch} ]"
         [[ "${out_log}" == "true" ]] && {
-            echo -e "${INFO} (2.3.3) 所有工作流运行列表:\n$(cat ${all_workflows_list})"
+            echo -e "${INFO} (2.3.3) 所有工作流运行列表:\n$(cat ${all_workflows_list} | jq -c '.')"
         }
     else
         echo -e "${NOTE} (2.3.4) 工作流列表为空，跳过"
@@ -414,38 +433,59 @@ out_workflows_list() {
     fi
 
     # 剔除包含关键词的工作流
-    keep_keyword_workflows_list="json_keep_keyword_workflows_list"
-    echo -n "" > "${keep_keyword_workflows_list}"
+    filtered_workflows_list="json_filtered_workflows"
+    cp "${all_workflows_list}" "${filtered_workflows_list}"
+    
     if [[ "${#workflows_keep_keyword[@]}" -ge "1" ]]; then
         echo -e "${INFO} (2.4.1) 工作流过滤关键词: [ $(echo ${workflows_keep_keyword[@]} | xargs) ]"
+        
+        # 创建临时文件存储需要保留的工作流
+        keep_workflows_keyword_list="json_keep_workflows_keyword_list"
+        echo -n "" > "${keep_workflows_keyword_list}"
+        
+        # 提取包含关键词的工作流
         for keyword in "${workflows_keep_keyword[@]}"; do
-            cat "${all_workflows_list}" | jq -r --arg keyword "$keyword" '. | select(.name | contains($keyword) | not)' >> "${keep_keyword_workflows_list}"
+            jq -c --arg keyword "$keyword" 'select(.name | contains($keyword))' "${filtered_workflows_list}" >> "${keep_workflows_keyword_list}"
         done
-        mv "${keep_keyword_workflows_list}" "${all_workflows_list}"
-        echo -e "${INFO} (2.4.2) 剔除关键词后的工作流列表:\n$(cat ${all_workflows_list})"
+        
+        # 如果有关键词匹配的工作流，则保留它们
+        if [[ -s "${keep_workflows_keyword_list}" ]]; then
+            mv "${keep_workflows_keyword_list}" "${all_workflows_list}"
+            echo -e "${INFO} (2.4.2) 保留包含关键词的工作流，共 $(cat ${all_workflows_list} | wc -l) 条"
+            [[ "${out_log}" == "true" ]] && echo -e "${INFO} (2.4.3) 保留的工作流列表:\n$(cat ${all_workflows_list} | jq -c '.')"
+        else
+            echo -e "${NOTE} (2.4.4) 没有找到符合关键词的工作流，跳过"
+            cp "${filtered_workflows_list}" "${all_workflows_list}"
+        fi
     else
-        echo -e "${INFO} (2.4.3) 无关键词过滤，保留所有工作流"
+        echo -e "${INFO} (2.4.5) 无关键词过滤，保留所有工作流"
     fi
 
-    # 保留时间靠前的N个工作流
-    keep_workflows_list="json_keep_workflows_list"
-    echo -n "" > "${keep_workflows_list}"
-    if [[ "${workflows_keep_latest}" -gt "0" ]]; then
-        echo -e "${INFO} (2.5.1) 保留时间靠前的 ${workflows_keep_latest} 个工作流"
-        cat "${all_workflows_list}" | jq -s 'sort_by(.date | fromdateiso8601) | reverse | .[:'${workflows_keep_latest}']' > "${keep_workflows_list}"
-        echo -e "${INFO} (2.5.2) 保留工作流列表:\n$(cat ${keep_workflows_list})"
+    # 保留最新的N个工作流
+    if [[ -s "${all_workflows_list}" ]]; then
+        if [[ "${workflows_keep_latest}" -eq "0" ]]; then
+            echo -e "${INFO} (2.5.1) 删除所有工作流"
+            cp "${all_workflows_list}" "json_delete_workflows_list"
+        else
+            # 按时间排序并保留最新的N个
+            keep_workflows_list="json_keep_workflows_list"
+            jq -s 'sort_by(.date | fromdateiso8601) | reverse | .[0:'${workflows_keep_latest}']' "${all_workflows_list}" > "${keep_workflows_list}"
+            
+            echo -e "${INFO} (2.5.2) 保留最新的 ${workflows_keep_latest} 个工作流"
+            [[ "${out_log}" == "true" ]] && echo -e "${INFO} (2.5.3) 保留工作流列表:\n$(cat ${keep_workflows_list} | jq -c '.[]')"
+            
+            # 生成删除列表（排除保留的工作流）
+            delete_workflows_list="json_delete_workflows_list"
+            jq -s --argjson keep "$(cat ${keep_workflows_list})" 'map(select(.id as $id | $keep | map(.id) | index($id) | not))' "${all_workflows_list}" > "${delete_workflows_list}"
+            
+            if [[ -s "${delete_workflows_list}" ]]; then
+                echo -e "${INFO} (2.5.4) 删除工作流列表:\n$(cat ${delete_workflows_list} | jq -c '.[]')"
+            else
+                echo -e "${NOTE} (2.5.5) 删除工作流列表为空，跳过"
+            fi
+        fi
     else
-        echo -e "${INFO} (2.5.3) 不保留任何工作流"
-    fi
-
-    # 删除列表
-    delete_workflows_list="json_delete_workflows_list"
-    echo -n "" > "${delete_workflows_list}"
-    if [[ -s "${keep_workflows_list}" ]]; then
-        cat "${all_workflows_list}" | jq -s --argjson keep "$(cat "${keep_workflows_list}")" '. | map(select(.id as $id | index($id) | not))' > "${delete_workflows_list}"
-        echo -e "${INFO} (2.5.4) 删除工作流列表:\n$(cat ${delete_workflows_list})"
-    else
-        echo -e "${INFO} (2.5.5) 删除工作流列表为空，跳过"
+        echo -e "${NOTE} (2.5.6) 工作流列表为空，跳过"
     fi
 }
 
@@ -453,33 +493,35 @@ out_workflows_list() {
 del_workflows_runs() {
     echo -e "${STEPS} 开始删除工作流..."
 
-    if [[ ! -s "${delete_workflows_list}" ]]; then
+    delete_workflows_list="json_delete_workflows_list"
+    if [[ -s "${delete_workflows_list}" ]]; then
+        total=$(cat ${delete_workflows_list} | jq -s 'length')
+        count=0
+
+        echo -e "${INFO} (2.6.1) 总共需要删除 ${total} 个工作流"
+        
+        cat ${delete_workflows_list} | jq -r '.id' | while read run_id; do
+            count=$((count + 1))
+            echo -e "${INFO} (2.6.1) 正在删除工作流 ${count}/${total} (ID=${run_id})"
+            
+            response=$(curl -s -o /dev/null -w "%{http_code}" \
+                -X DELETE \
+                -H "Authorization: Bearer ${gh_token}" \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "https://api.github.com/repos/${repo}/actions/runs/${run_id}"
+            )
+            
+            if [[ "$response" -eq 204 ]]; then
+                echo -e "${SUCCESS} (2.6.2) 工作流 ${count}/${total}：ID=${run_id} 删除成功"
+            else
+                echo -e "${ERROR} (2.6.3) 删除工作流 ${count}/${total}：ID=${run_id} 失败: HTTP ${response}"
+            fi
+        done
+        echo -e "${SUCCESS} (2.6.4) 工作流删除完成"
+    else
         echo -e "${NOTE} 没有需要删除的工作流，跳过"
-        return
     fi
-
-    total=$(cat "${delete_workflows_list}" | wc -l)
-    count=0
-
-    cat "${delete_workflows_list}" | jq -r '.id' | while read run_id; do
-        count=$((count + 1))
-        echo -e "${INFO} (2.6.1) 正在删除工作流 ${count}/${total}: ID=${run_id}"
-        
-        response=$(curl -s -o /dev/null -w "%{http_code}" \
-            -X DELETE \
-            -H "Authorization: Bearer ${gh_token}" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/${repo}/actions/runs/${run_id}"
-        )
-        
-        if [[ "$response" -eq 204 ]]; then
-            echo -e "${SUCCESS} (2.6.2) 工作流 ${count}：ID=${run_id} 删除成功"
-        else
-            echo -e "${ERROR} (2.6.3) 删除工作流 ${count}：ID=${run_id} 失败: HTTP ${response}"
-        fi
-    done
-    echo -e "${SUCCESS} (2.6.4) 工作流删除完成"
 }
 
 
