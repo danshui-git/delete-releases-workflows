@@ -115,7 +115,7 @@ get_releases_list() {
 
     # 创建文件存储结果
     all_releases_list="json_api_releases"
-    echo "" >"${all_releases_list}"
+    echo -n "" >"${all_releases_list}"
     
     # 计算需要请求的总页数
     total_pages=$(( (max_releases_fetch + github_per_page - 1) / github_per_page ))
@@ -330,7 +330,7 @@ get_workflows_list() {
 
     # 创建文件存储结果
     all_workflows_list="json_api_workflows"
-    echo "" >"${all_workflows_list}"
+    echo -n "" >"${all_workflows_list}"
     
     # 计算需要请求的总页数
     total_pages=$(( (max_workflows_fetch + github_per_page - 1) / github_per_page ))
