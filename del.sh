@@ -23,6 +23,9 @@ NOTE="[\033[93m 结果 \033[0m]"
 ERROR="[\033[91m 错误 \033[0m]"
 SUCCESS="[\033[92m 成功 \033[0m]"
 
+# 设置文件权限
+umask 0022
+
 # 错误则停止运行函数
 error_msg() {
     echo -e "${ERROR} ${1}"
@@ -59,7 +62,6 @@ validate_positive_integer() {
 # 安全转义关键词为正则表达式
 escape_regex() {
     local text="$1"
-    # 转义正则特殊字符: . ^ $ * + ? ( ) [ ] { } | \
     echo "$text" | sed -e 's/[.[\*^$+?(){}\\|]/\\&/g'
 }
 
@@ -72,25 +74,15 @@ convert_slash_to_space() {
 # 确保文件可读写
 ensure_file() {
     local file="$1"
-    if [[ -e "$file" ]]; then
-        chmod 600 "$file" || {
-            echo -e "${ERROR} 无法修改文件权限: $file"
-            return 1
-        }
-    else
-        touch "$file" || {
-            echo -e "${ERROR} 无法创建文件: $file"
-            return 1
-        }
-        chmod 600 "$file" || {
-            echo -e "${ERROR} 无法修改文件权限: $file"
-            return 1
-        }
+    mkdir -p "$(dirname "$file")"
+    if ! touch "$file" || ! chmod 644 "$file"; then
+        echo -e "${ERROR} 无法设置文件权限: $file"
+        return 1
     fi
     return 0
 }
 
-# 验证JSON文件格式
+# 增强版JSON验证
 validate_json_file() {
     local file="$1"
     if [[ ! -s "$file" ]]; then
@@ -98,11 +90,20 @@ validate_json_file() {
         return 1
     fi
     
-    if ! jq -e . "$file" >/dev/null 2>&1; then
-        echo -e "${ERROR} JSON格式验证失败: $file"
-        cp "$file" "${file}.invalid"
-        echo -e "${INFO} 已保存无效JSON文件: ${file}.invalid"
-        return 1
+    # 预处理JSON文件
+    sed -i '/^[[:space:]]*$/d' "$file"
+    echo "" >> "$file"  # 确保文件以换行符结束
+    
+    # 尝试修复JSON数组格式
+    if ! jq -e '.' "$file" >/dev/null 2>&1; then
+        if ! jq -s '.' "$file" > "${file}.tmp" 2>/dev/null; then
+            echo -e "${ERROR} JSON格式验证失败: $file"
+            cp "$file" "${file}.invalid"
+            echo -e "${INFO} 已保存无效JSON文件: ${file}.invalid"
+            return 1
+        else
+            mv "${file}.tmp" "$file"
+        fi
     fi
     
     return 0
@@ -441,13 +442,11 @@ get_workflows_list() {
             break
         fi
 
-        # 提取并处理工作流数据，增加错误处理
-        page_data="$(echo "${response}" | jq -c '.workflow_runs[] | 
+        # 增强版数据处理
+        page_data="$(echo "${response}" | 
+            jq -c '.workflow_runs[] | 
             select(.status != "in_progress" and .status != "queued") | 
-            {date: .updated_at, id: .id, name: .name}')" || {
-                echo -e "${ERROR} (2.1.${page}) 处理工作流数据失败，跳过此页"
-                continue
-            }
+            {date: (.updated_at // .created_at), id: .id, name: (.name // "workflow_\(.workflow_id)")}' 2>/dev/null || echo "")"
 
         # 验证提取的数据是否有效
         if [[ -n "$page_data" ]]; then
@@ -476,15 +475,16 @@ get_workflows_list() {
         echo -e "${INFO} (2.3.1) 获取工作流信息请求成功。"
         echo -e "${INFO} (2.3.2) 获取到的总工作流数量: [ ${actual_count} / ${max_workflows_fetch} ]"
         echo -e "${INFO} (2.3.3) 实际处理的工作流数量: [ ${total_processed} ]"
-        [[ "${out_log}" == "true" ]] && {
-            echo -e "${INFO} (2.3.4) 所有工作流运行列表:\n$(cat ${all_workflows_list})"
-        }
         
         # 验证工作流数据格式
         if ! validate_json_file "$all_workflows_list"; then
             echo -e "${ERROR} 工作流数据格式无效，跳过后续处理"
             return 1
         fi
+
+        [[ "${out_log}" == "true" ]] && {
+            echo -e "${INFO} (2.3.4) 所有工作流运行列表:\n$(cat ${all_workflows_list})"
+        }
     else
         echo -e "${NOTE} (2.3.4) 工作流列表为空，跳过。"
     fi
@@ -622,6 +622,9 @@ del_workflows_runs() {
 
 # 显示欢迎信息
 echo -e "${STEPS} 欢迎使用删除旧发布和工作流运行工具!"
+
+# 清理旧文件
+rm -f json_api_* json_keep_* *_error.json
 
 # 检查变量
 init_var "$@"
