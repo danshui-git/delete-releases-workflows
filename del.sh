@@ -90,6 +90,24 @@ ensure_file() {
     return 0
 }
 
+# 验证JSON文件格式
+validate_json_file() {
+    local file="$1"
+    if [[ ! -s "$file" ]]; then
+        echo -e "${ERROR} 文件为空: $file"
+        return 1
+    fi
+    
+    if ! jq -e . "$file" >/dev/null 2>&1; then
+        echo -e "${ERROR} JSON格式验证失败: $file"
+        cp "$file" "${file}.invalid"
+        echo -e "${INFO} 已保存无效JSON文件: ${file}.invalid"
+        return 1
+    fi
+    
+    return 0
+}
+
 init_var() {
     echo -e "${STEPS} 开始初始化变量..."
 
@@ -461,6 +479,12 @@ get_workflows_list() {
         [[ "${out_log}" == "true" ]] && {
             echo -e "${INFO} (2.3.4) 所有工作流运行列表:\n$(cat ${all_workflows_list})"
         }
+        
+        # 验证工作流数据格式
+        if ! validate_json_file "$all_workflows_list"; then
+            echo -e "${ERROR} 工作流数据格式无效，跳过后续处理"
+            return 1
+        fi
     else
         echo -e "${NOTE} (2.3.4) 工作流列表为空，跳过。"
     fi
@@ -484,6 +508,7 @@ out_workflows_list() {
             for keyword in "${workflows_keep_keyword[@]}"; do
                 escaped_keyword=$(escape_regex "$keyword")
                 echo -e "${INFO} (2.4.2) 处理关键词: [ ${keyword} ] -> [ ${escaped_keyword} ]"
+                # 使用jq而非grep，避免特殊字符问题
                 cat "${all_workflows_list}" | jq -r '.name' | grep -E "${escaped_keyword}" >> "${keep_keyword_workflows_list}"
             done
             
@@ -493,11 +518,10 @@ out_workflows_list() {
                     echo -e "${INFO} (2.4.4) 符合条件的工作流列表:\n$(cat ${keep_keyword_workflows_list})"
                 }
 
-                # 删除需要保留的工作流（逐行处理，避免正则冲突）
-                while read -r line; do
-                    escaped_line=$(escape_regex "$line")
-                    sed -i "/\"name\": \"${escaped_line}\"/d" "${all_workflows_list}"
-                done < "${keep_keyword_workflows_list}"
+                # 删除需要保留的工作流（使用jq而非sed，避免特殊字符问题）
+                keep_names=$(cat "${keep_keyword_workflows_list}" | jq -R -s -c 'split("\n")[:-1]')
+                jq --argjson names "$keep_names" 'select(.name as $n | $names | index($n) | not)' "${all_workflows_list}" > "${all_workflows_list}.tmp"
+                mv "${all_workflows_list}.tmp" "${all_workflows_list}"
                 
                 echo -e "${SUCCESS} (2.4.5) 关键词过滤成功。剩余工作流数量: $(cat ${all_workflows_list} | wc -l)"
             else
@@ -623,4 +647,3 @@ fi
 
 # 显示所有流程完成提示
 echo -e "${SUCCESS} 所有流程执行成功。"
-wait
