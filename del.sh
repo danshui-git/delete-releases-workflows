@@ -37,7 +37,7 @@ validate_prerelease() {
 # 验证正整数（1-1000）
 validate_positive_integer() {
     local var="$1" param_name="$2" max="$3"
-    if ! [[ "$var" =~ ^[1-9][0-9]*$ ]]; then
+    if ! [[ "$var" =~ ^[0-9][0-9]*$ ]]; then
         error_msg "参数 $param_name 的值: $var 无效，必须是正整数"
     fi
     if [[ "$var" -gt "$max" ]]; then
