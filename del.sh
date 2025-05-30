@@ -57,56 +57,56 @@ init_var() {
     while [[ -n "${1}" ]]; do
         case "${1}" in
         -r | --repo)
-                repo="${2}"
-                shift
+            repo="${2}"
+            shift
             ;;
         -a | --delete_releases)
-                delete_releases="${2}"
-                shift
+            delete_releases="${2}"
+            shift
             ;;
         -t | --delete_tags)
-                delete_tags="${2}"
-                shift
+            delete_tags="${2}"
+            shift
             ;;
         -p | --prerelease_option)
-                prerelease_option="${2}"
-                shift
+            prerelease_option="${2}"
+            shift
             ;;
         -l | --releases_keep_latest)
-                releases_keep_latest="${2}"
-                shift
+            releases_keep_latest="${2}"
+            shift
             ;;
         -w | --releases_keep_keyword)
-                IFS="/" read -r -a releases_keep_keyword <<< "${2}"
-                shift
+            IFS="/" read -r -a releases_keep_keyword <<< "${2}"
+            shift
             ;;
         -c | --max_releases_fetch)
-                max_releases_fetch="${2}"
-                shift
+            max_releases_fetch="${2}"
+            shift
             ;;
         -s | --delete_workflows)
-                delete_workflows="${2}"
-                shift
+            delete_workflows="${2}"
+            shift
             ;;
         -d | --workflows_keep_latest)
-                workflows_keep_latest="${2}"
-                shift
+            workflows_keep_latest="${2}"
+            shift
             ;;
         -k | --workflows_keep_keyword)
-                IFS="/" read -r -a workflows_keep_keyword <<< "${2}"
-                shift
+            IFS="/" read -r -a workflows_keep_keyword <<< "${2}"
+            shift
             ;;
         -h | --max_workflows_fetch)
-                max_workflows_fetch="${2}"
-                shift
+            max_workflows_fetch="${2}"
+            shift
             ;;
         -g | --gh_token)
-                gh_token="${2}"
-                shift
+            gh_token="${2}"
+            shift
             ;;
         -o | --out_log)
-                out_log="${2}"
-                shift
+            out_log="${2}"
+            shift
             ;;
         *)
             error_msg "无效选项 [ ${1} ]!"
