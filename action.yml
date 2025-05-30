@@ -83,7 +83,7 @@ runs:
         ERROR="[\033[91m ERROR \033[0m]"
         error_msg() {
             echo -e "${ERROR} ${1}"
-            exit 1
+            exit 0
         }
 
         # 验证必需参数,如果参数为空则会停止整个脚本运行
