@@ -1,5 +1,15 @@
 #!/usr/bin/env bash
-#
+
+# ---
+# 用于GitHub，删除旧发布和旧的工作流
+# 原作者: ophub
+# 相关链接: https://github.com/ophub/delete-releases-workflows
+# ---
+# 由281677160二次修改，修改内容如下
+# 1、修改原保留工作流天数,改成保留时间靠前的个数
+# 2、增加每次检测工作流或者发布的总数量,避免一次删除过多造成时间过长
+# ---
+
 # 设置默认值
 github_per_page="100"  # 每次请求获取的数量
 github_max_page="100"  # 最大请求页数
