@@ -5,7 +5,7 @@ github_per_page="100"  # 每次请求获取的数量
 github_max_page="100"  # 最大请求页数
 
 # 设置字体颜色
-STEPS="[\033[95m 步骤 \033[0m]"
+STEPS="[\033[95m 执行 \033[0m]"
 INFO="[\033[94m 信息 \033[0m]"
 NOTE="[\033[93m 注意 \033[0m]"
 ERROR="[\033[91m 错误 \033[0m]"
@@ -22,7 +22,7 @@ error_msg() {
 validate_boolean() {
     local var="$1" param_name="$2"
     if [[ ! "$var" =~ ^(true|false)$ ]]; then
-        error_msg "参数 $param_name 的值无效: $var 必须是 'true' 或 'false'"
+        error_msg "参数 $param_name 的值: $var 无效，必须是 'true' 或 'false'"
     fi
 }
 
@@ -30,7 +30,7 @@ validate_boolean() {
 validate_prerelease() {
     local var="$1" param_name="$2"
     if [[ ! "$var" =~ ^(true|false|all)$ ]]; then
-        error_msg "参数 $param_name 的值无效: $var 必须是 'true', 'false', 或 'all'."
+        error_msg "参数 $param_name 的值: $var 无效，必须是 'true', 'false', 或 'all'."
     fi
 }
 
@@ -38,10 +38,10 @@ validate_prerelease() {
 validate_positive_integer() {
     local var="$1" param_name="$2" max="$3"
     if ! [[ "$var" =~ ^[1-9][0-9]*$ ]]; then
-        error_msg "参数 $param_name 的值无效: $var 必须是正整数"
+        error_msg "参数 $param_name 的值: $var 无效，必须是正整数"
     fi
     if [[ "$var" -gt "$max" ]]; then
-        error_msg "参数 $param_name 的值无效: $var 最大值是 $max"
+        error_msg "参数 $param_name 的值: $var 无效，最大值是 $max"
     fi
 }
 
