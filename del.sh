@@ -25,7 +25,7 @@ SUCCESS="[\033[92m 成功 \033[0m]"
 
 error_msg() {
     echo -e "${ERROR} ${1}"
-    exit 1
+    exit 0
 }
 
 # 验证布尔值
