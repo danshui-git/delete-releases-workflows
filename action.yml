@@ -92,6 +92,7 @@ runs:
         [[ -z "${delete_workflows}" ]] && error_msg "必须设置 [ delete_workflows ] 参数，且参数为 'true' 或 'false'"
         [[ ! -f "del.sh" ]] && error_msg "未知原因，找不到 [ del.sh ] 执行文件"
 
+        # 删除参数的空白字符，包括空格、制表符和换行符
         delete_releases="${delete_releases//[[:space:]]/}"
         delete_tags="${delete_tags//[[:space:]]/}"
         prerelease_option="${prerelease_option//[[:space:]]/}"
