@@ -65,18 +65,18 @@ runs:
 
         # 所有应用参数，同时删除空白字符
         gh_token="${{ inputs.gh_token }}"
-        delete_releases="${{ inputs.delete_releases//[[:space:]]/ }}"
-        delete_tags="${{ inputs.delete_tags//[[:space:]]/ }}"
-        prerelease_option="${{ inputs.prerelease_option//[[:space:]]/ }}"
-        releases_keep_latest="${{ inputs.releases_keep_latest//[[:space:]]/ }}"
-        releases_keep_keyword="${{ inputs.releases_keep_keyword//[[:space:]]/ }}"
-        max_releases_fetch="${{ inputs.max_releases_fetch//[[:space:]]/ }}"
-        delete_workflows="${{ inputs.delete_workflows//[[:space:]]/ }}"
-        workflows_keep_latest="${{ inputs.workflows_keep_latest//[[:space:]]/ }}"
-        workflows_keep_keyword="${{ inputs.workflows_keep_keyword//[[:space:]]/ }}"
-        max_workflows_fetch="${{ inputs.max_workflows_fetch//[[:space:]]/ }}"
-        out_log="${{ inputs.out_log//[[:space:]]/ }}"
-        repo="${{ inputs.repo//[[:space:]]/ }}"
+        delete_releases=$(echo "${{ inputs.delete_releases }}" | tr -d '[:space:]')
+        delete_tags=$(echo "${{ inputs.delete_tags }}" | tr -d '[:space:]')
+        prerelease_option=$(echo "${{ inputs.prerelease_option }}" | tr -d '[:space:]')
+        releases_keep_latest=$(echo "${{ inputs.releases_keep_latest }}" | tr -d '[:space:]')
+        releases_keep_keyword=$(echo "${{ inputs.releases_keep_keyword }}" | tr -d '[:space:]')
+        max_releases_fetch=$(echo "${{ inputs.max_releases_fetch }}" | tr -d '[:space:]')
+        delete_workflows=$(echo "${{ inputs.delete_workflows }}" | tr -d '[:space:]')
+        workflows_keep_latest=$(echo "${{ inputs.workflows_keep_latest }}" | tr -d '[:space:]')
+        workflows_keep_keyword=$(echo "${{ inputs.workflows_keep_keyword }}" | tr -d '[:space:]')
+        max_workflows_fetch=$(echo "${{ inputs.max_workflows_fetch }}" | tr -d '[:space:]')
+        out_log=$(echo "${{ inputs.out_log }}" | tr -d '[:space:]')
+        repo=$(echo "${{ inputs.repo }}" | tr -d '[:space:]}')
 
         # 错误提示颜色
         ERROR="[\033[91m ERROR \033[0m]"
