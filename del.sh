@@ -51,76 +51,99 @@ init_var() {
     # 安装必要依赖包
     sudo apt-get -qq update && sudo apt-get -qq install -y jq curl
 
-    # 解析命令行参数
-    get_all_ver="$(getopt "r:a:t:p:l:w:c:s:d:k:h:g:o:" "${@}")"
-    eval set -- "${get_all_ver}"
+    # 初始化变量
+    delete_releases="false"
+    delete_tags="false"
+    prerelease_option="all"
+    releases_keep_latest="0"
+    releases_keep_keyword=()
+    max_releases_fetch="100"
+    delete_workflows="false"
+    workflows_keep_latest="0"
+    workflows_keep_keyword=()
+    max_workflows_fetch="100"
+    out_log="false"
 
-    while [[ -n "${1}" ]]; do
-        case "${1}" in
-        -r | --repo)
-            repo="${2}"
-            shift 2
-            ;;
-        -a | --delete_releases)
-            delete_releases="${2}"
-            shift 2
-            ;;
-        -t | --delete_tags)
-            delete_tags="${2}"
-            shift 2
-            ;;
-        -p | --prerelease_option)
-            prerelease_option="${2}"
-            shift 2
-            ;;
-        -l | --releases_keep_latest)
-            releases_keep_latest="${2}"
-            shift 2
-            ;;
-        -w | --releases_keep_keyword)
-            IFS="/" read -r -a releases_keep_keyword <<< "${2}"
-            shift 2
-            ;;
-        -c | --max_releases_fetch)
-            max_releases_fetch="${2}"
-            shift 2
-            ;;
-        -s | --delete_workflows)
-            delete_workflows="${2}"
-            shift 2
-            ;;
-        -d | --workflows_keep_latest)
-            workflows_keep_latest="${2}"
-            shift 2
-            ;;
-        -k | --workflows_keep_keyword)
-            IFS="/" read -r -a workflows_keep_keyword <<< "${2}"
-            shift 2
-            ;;
-        -h | --max_workflows_fetch)
-            max_workflows_fetch="${2}"
-            shift 2
-            ;;
-        -g | --gh_token)
-            gh_token="${2}"
-            shift 2
-            ;;
-        -o | --out_log)
-            out_log="${2}"
-            shift 2
-            ;;
-        *)
-            error_msg "无效选项: ${1}"
-            ;;
+    # 使用 getopts 解析短选项和长选项
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -r|--repo)
+                repo="$2"
+                shift 2
+                ;;
+            -a|--delete-releases)
+                delete_releases="$2"
+                shift 2
+                ;;
+            -t|--delete-tags)
+                delete_tags="$2"
+                shift 2
+                ;;
+            -p|--prerelease-option)
+                prerelease_option="$2"
+                shift 2
+                ;;
+            -l|--releases-keep-latest)
+                releases_keep_latest="$2"
+                shift 2
+                ;;
+            -w|--releases-keep-keyword)
+                IFS=',' read -r -a releases_keep_keyword <<< "$2"
+                shift 2
+                ;;
+            -c|--max-releases-fetch)
+                max_releases_fetch="$2"
+                shift 2
+                ;;
+            -s|--delete-workflows)
+                delete_workflows="$2"
+                shift 2
+                ;;
+            -d|--workflows-keep-latest)
+                workflows_keep_latest="$2"
+                shift 2
+                ;;
+            -k|--workflows-keep-keyword)
+                IFS=',' read -r -a workflows_keep_keyword <<< "$2"
+                shift 2
+                ;;
+            -h|--max-workflows-fetch)
+                max_workflows_fetch="$2"
+                shift 2
+                ;;
+            -g|--gh-token)
+                gh_token="$2"
+                shift 2
+                ;;
+            -o|--out-log)
+                out_log="$2"
+                shift 2
+                ;;
+            --)  # 选项结束标记
+                shift
+                break
+                ;;
+            *)
+                error_msg "未知选项: $1"
+                ;;
         esac
     done
+
+    # 验证必需参数
+    if [[ -z "$repo" ]]; then
+        error_msg "必须指定仓库参数 (-r/--repo)"
+    fi
+    
+    if [[ -z "$gh_token" ]]; then
+        error_msg "必须指定 GitHub Token 参数 (-g/--gh-token)"
+    fi
 
     # 参数验证
     validate_boolean "$delete_releases" "delete_releases"
     validate_boolean "$delete_tags" "delete_tags"
     validate_boolean "$delete_workflows" "delete_workflows"
     validate_boolean "$out_log" "out_log"
-    validate_prerelease "${prerelease_option}" "prerelease_option"
+    validate_prerelease "$prerelease_option" "prerelease_option"
     validate_positive_integer "$releases_keep_latest" "releases_keep_latest" 1000
     validate_positive_integer "$workflows_keep_latest" "workflows_keep_latest" 1000
     validate_positive_integer "$max_releases_fetch" "max_releases_fetch" 1000
@@ -132,11 +155,11 @@ init_var() {
     echo -e "${INFO} 删除标签: [ ${delete_tags} ]"
     echo -e "${INFO} 预发布选项: [ ${prerelease_option} ]"
     echo -e "${INFO} 保留最新版本数: [ ${releases_keep_latest} ]"
-    echo -e "${INFO} 保留版本关键词: [ $(echo ${releases_keep_keyword[@]} | xargs) ]"
+    echo -e "${INFO} 保留版本关键词: [ ${releases_keep_keyword[*]} ]"
     echo -e "${INFO} 最大获取版本数: [ ${max_releases_fetch} ]"
     echo -e "${INFO} 删除工作流: [ ${delete_workflows} ]"
     echo -e "${INFO} 保留最新工作流数: [ ${workflows_keep_latest} ]"
-    echo -e "${INFO} 保留工作流关键词: [ $(echo ${workflows_keep_keyword[@]} | xargs) ]"
+    echo -e "${INFO} 保留工作流关键词: [ ${workflows_keep_keyword[*]} ]"
     echo -e "${INFO} 最大获取工作流数: [ ${max_workflows_fetch} ]"
     echo -e "${INFO} 输出日志: [ ${out_log} ]"
     echo -e ""
