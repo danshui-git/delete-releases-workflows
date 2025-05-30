@@ -40,7 +40,7 @@ error_msg() {
     exit 1
 }
 
-# 验证开关值
+# 验证开关值函数
 validate_boolean() {
     local var="$1" param_name="$2"
     if [[ ! "$var" =~ ^(true|false)$ ]]; then
@@ -48,7 +48,7 @@ validate_boolean() {
     fi
 }
 
-# 验证预发布选项
+# 验证预发版选项函数
 validate_prerelease() {
     local var="$1" param_name="$2"
     if [[ ! "$var" =~ ^(true|false|all)$ ]]; then
@@ -56,7 +56,7 @@ validate_prerelease() {
     fi
 }
 
-# 验证正整数（1-1000）
+# 验证正整数函数（1-1000）
 validate_positive_integer() {
     local var="$1" param_name="$2" max="$3"
     if ! [[ "$var" =~ ^[0-9][0-9]*$ ]]; then
@@ -78,13 +78,13 @@ init_var() {
     [[ -z "${delete_releases}" ]] && error_msg "必须附加[ delete_releases ]参数，且参数设置为 'true' 或 'false'"
     [[ -z "${delete_workflows}" ]] && error_msg "必须附加[ delete_workflows ]参数，且参数设置为 'true' 或 'false'"
 
-    # 参数验证
+    # 验证各种参数开关
     validate_boolean "$delete_releases" "delete_releases"
     validate_boolean "$delete_tags" "delete_tags"
     validate_boolean "$delete_workflows" "delete_workflows"
     validate_boolean "$out_log" "out_log"
 
-    # 验证预发布选项
+    # 验证预发版选项参数
     validate_prerelease "${prerelease_option}" "prerelease_option"
 
     # 验证整数值参数
