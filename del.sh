@@ -9,6 +9,7 @@
 # 1、改进参数传递方式和检查
 # 2、修改原保留工作流天数,改成保留时间靠前的个数
 # 3、增加每次检测工作流或者发布的总数量,避免一次删除过多造成时间过长
+# 4、修复工作流列表显示为空和关键词过滤失败的问题
 # ---
 
 # 设置默认值
@@ -53,6 +54,13 @@ validate_positive_integer() {
     if [[ "$var" -gt "$max" ]]; then
         error_msg "参数 $param_name 的值: $var 无效，最大值为 $max"
     fi
+}
+
+# 安全转义关键词为正则表达式
+escape_regex() {
+    local text="$1"
+    # 转义正则特殊字符: . ^ $ * + ? ( ) [ ] { } | \
+    echo "$text" | sed -e 's/[.[\*^$+?(){}\\|]/\\&/g'
 }
 
 init_var() {
@@ -177,40 +185,60 @@ out_releases_list() {
     echo -e "${STEPS} 开始输出发布列表..."
 
     if [[ -s "${all_releases_list}" ]]; then
+        echo -e "${INFO} (1.4.0) 过滤前发布列表行数: $(cat ${all_releases_list} | wc -l)"
+        
         # 根据预发布选项过滤(all/false/true)
         if [[ "${prerelease_option}" == "all" ]]; then
             echo -e "${NOTE} (1.4.1) 不过滤预发布选项，检查全部发布信息。"
         elif [[ "${prerelease_option}" == "false" ]]; then
             echo -e "${INFO} (1.4.2) 过滤预发版选项: [ false ]"
-            cat ${all_releases_list} | jq -r '.prerelease' | grep -w "true" | while read line; do sed -i "/${line}/d" ${all_releases_list}; done
+            # 使用jq过滤而非sed，避免误删
+            jq -s 'map(select(.prerelease == false))' "${all_releases_list}" > "${all_releases_list}.tmp"
+            mv "${all_releases_list}.tmp" "${all_releases_list}"
         elif [[ "${prerelease_option}" == "true" ]]; then
             echo -e "${INFO} (1.4.3) 过滤预发版选项: [ true ]"
-            cat ${all_releases_list} | jq -r '.prerelease' | grep -w "false" | while read line; do sed -i "/${line}/d" ${all_releases_list}; done
+            jq -s 'map(select(.prerelease == true))' "${all_releases_list}" > "${all_releases_list}.tmp"
+            mv "${all_releases_list}.tmp" "${all_releases_list}"
         fi
-        [[ "${out_log}" == "true" ]] && echo -e "${INFO} (1.4.4) 当前发布列表:\n$(cat ${all_releases_list})"
+        
+        echo -e "${INFO} (1.4.4) 预发布过滤后发布列表行数: $(cat ${all_releases_list} | wc -l)"
+        [[ "${out_log}" == "true" ]] && echo -e "${INFO} (1.4.5) 当前发布列表:\n$(cat ${all_releases_list})"
     else
-        echo -e "${NOTE} (1.4.5) 发布列表为空，跳过。"
+        echo -e "${NOTE} (1.4.6) 发布列表为空，跳过。"
+        return
     fi
 
     # 匹配需要过滤的标签
     keep_releases_keyword_list="json_keep_releases_keyword_list"
     if [[ "${#releases_keep_keyword[@]}" -ge "1" && -s "${all_releases_list}" ]]; then
-        # 匹配符合条件的标签
         echo -e "${INFO} (1.5.1) 过滤标签关键词: [ $(echo ${releases_keep_keyword[@]} | xargs) ]"
+        echo "" > "${keep_releases_keyword_list}"
+        
+        # 收集所有需要保留的标签
         for keyword in "${releases_keep_keyword[@]}"; do
-            cat ${all_releases_list} | jq -r '.tag_name' | grep -E "${keyword//\//\\/}" >>${keep_releases_keyword_list}
+            escaped_keyword=$(escape_regex "$keyword")
+            echo -e "${INFO} (1.5.2) 处理关键词: [ ${keyword} ] -> [ ${escaped_keyword} ]"
+            cat "${all_releases_list}" | jq -r '.tag_name' | grep -E "${escaped_keyword}" >> "${keep_releases_keyword_list}"
         done
-        [[ "${out_log}" == "true" && -s "${keep_releases_keyword_list}" ]] && {
-            echo -e "${INFO} (1.5.2) 符合条件的标签列表:\n$(cat ${keep_releases_keyword_list})"
-        }
+        
+        if [[ -s "${keep_releases_keyword_list}" ]]; then
+            echo -e "${INFO} (1.5.3) 符合条件的标签数量: $(cat ${keep_releases_keyword_list} | wc -l)"
+            [[ "${out_log}" == "true" ]] && {
+                echo -e "${INFO} (1.5.4) 符合条件的标签列表:\n$(cat ${keep_releases_keyword_list})"
+            }
 
-        # 删除需要保留的标签
-        [[ -s "${keep_releases_keyword_list}" ]] && {
-            cat ${keep_releases_keyword_list} | while read line; do sed -i "/${line//\//\\/}/d" ${all_releases_list}; done
-            echo -e "${SUCCESS} (1.5.3) 标签关键词过滤成功。"
-        }
+            # 删除需要保留的标签（逐行处理，避免正则冲突）
+            while read -r line; do
+                escaped_line=$(escape_regex "$line")
+                sed -i "/\"tag_name\": \"${escaped_line}\"/d" "${all_releases_list}"
+            done < "${keep_releases_keyword_list}"
+            
+            echo -e "${SUCCESS} (1.5.5) 标签关键词过滤成功。剩余发布数量: $(cat ${all_releases_list} | wc -l)"
+        else
+            echo -e "${INFO} (1.5.6) 没有匹配到任何关键词标签。"
+        fi
     else
-        echo -e "${NOTE} (1.5.4) 关键字符为空，跳过过滤操作。"
+        echo -e "${NOTE} (1.5.7) 关键字符为空，跳过过滤操作。"
     fi
 
     # 匹配需要保留的最新标签
@@ -220,24 +248,25 @@ out_releases_list() {
             echo -e "${INFO} (1.6.1) 删除所有发布。"
         else
             # 生成需要保留的标签列表
-            cat ${all_releases_list} | head -n ${releases_keep_latest} >${keep_releases_list}
-            echo -e "${INFO} (1.6.2) 保留标签列表生成成功。"
+            cat "${all_releases_list}" | head -n "${releases_keep_latest}" > "${keep_releases_list}"
+            echo -e "${INFO} (1.6.2) 保留标签列表生成成功。保留数量: ${releases_keep_latest}"
             [[ "${out_log}" == "true" && -s "${keep_releases_list}" ]] && {
                 echo -e "${INFO} (1.6.3) 保留标签列表:\n$(cat ${keep_releases_list})"
             }
 
             # 从全量列表中删除需要保留的发布
-            sed -i "1,${releases_keep_latest}d" ${all_releases_list}
+            sed -i "1,${releases_keep_latest}d" "${all_releases_list}"
+            echo -e "${INFO} (1.6.4) 剩余待删除发布数量: $(cat ${all_releases_list} | wc -l)"
         fi
     else
-        echo -e "${NOTE} (1.6.4) 发布列表为空，跳过。"
+        echo -e "${NOTE} (1.6.5) 发布列表为空，跳过。"
     fi
 
     # 删除列表
     if [[ -s "${all_releases_list}" ]]; then
-        [[ "${out_log}" == "true" ]] && echo -e "${INFO} (1.6.5) 删除发布列表:\n$(cat ${all_releases_list})"
+        [[ "${out_log}" == "true" ]] && echo -e "${INFO} (1.6.6) 删除发布列表:\n$(cat ${all_releases_list})"
     else
-        echo -e "${NOTE} (1.6.6) 删除发布列表为空，跳过。"
+        echo -e "${NOTE} (1.6.7) 删除发布列表为空，跳过。"
     fi
 
     echo -e ""
@@ -350,13 +379,19 @@ get_workflows_list() {
         # 限制本次处理的数量
         if [[ "$get_results_length" -gt "$remaining" ]]; then
             echo "${response}" |
-                jq -c ".workflow_runs[:$remaining] | map(select(.status != \"in_progress\")) | .[] | {date: .updated_at, id: .id, name: .name}" \
+                jq -c ".workflow_runs[:$remaining] | 
+                      map(select(.status != \"in_progress\" and .status != \"queued\")) | 
+                      sort_by(.updated_at | fromdateiso8601) | reverse | 
+                      .[] | {date: .updated_at, id: .id, name: .name}" \
                     >>"${all_workflows_list}"
             current_count=$(( current_count + remaining ))
             break
         else
             echo "${response}" |
-                jq -c '.workflow_runs[] | select(.status != "in_progress") | {date: .updated_at, id: .id, name: .name}' \
+                jq -c '.workflow_runs[] | 
+                      select(.status != "in_progress" and .status != "queued") | 
+                      sort_by(.updated_at | fromdateiso8601) | reverse | 
+                      .[] | {date: .updated_at, id: .id, name: .name}' \
                     >>"${all_workflows_list}"
             current_count=$(( current_count + get_results_length ))
         fi
@@ -386,56 +421,79 @@ get_workflows_list() {
 out_workflows_list() {
     echo -e "${STEPS} 开始输出工作流列表..."
 
-    # 包含需要保留关键词的工作流
-    keep_keyword_workflows_list="json_keep_keyword_workflows_list"
-    # 删除匹配关键词需要保留的工作流
-    if [[ "${#workflows_keep_keyword[@]}" -ge "1" && -s "${all_workflows_list}" ]]; then
-        # 匹配符合关键词的工作流列表
-        echo -e "${INFO} (2.4.1) 过滤工作流运行关键词: [ $(echo ${workflows_keep_keyword[@]} | xargs) ]"
-        for keyword in "${workflows_keep_keyword[@]}"; do
-            cat ${all_workflows_list} | jq -r '.name' | grep -E "${keyword//\//\\/}" >>${keep_keyword_workflows_list}
-        done
-        [[ "${out_log}" == "true" && -s "${keep_keyword_workflows_list}" ]] && {
-            echo -e "${INFO} (2.4.2) 符合条件的工作流运行列表:\n$(cat ${keep_keyword_workflows_list})"
-        }
-
-        # 删除需要保留的工作流
-        [[ -s "${keep_keyword_workflows_list}" ]] && {
-            cat ${keep_keyword_workflows_list} | while read line; do sed -i "/${line//\//\\/}/d" ${all_workflows_list}; done
-            echo -e "${SUCCESS} (2.4.3) 关键词过滤成功。"
-        }
-    else
-        echo -e "${NOTE} (2.4.4) 关键字符为空，跳过过滤操作。"
-    fi
-
-    # 生成需要保留的工作流列表
-    keep_workflows_list="json_keep_workflows_list"
     if [[ -s "${all_workflows_list}" ]]; then
-        if [[ "${workflows_keep_latest}" -eq "0" ]]; then
-            echo -e "${INFO} (2.5.1) 删除所有工作流运行。"
+        echo -e "${INFO} (2.4.0) 过滤前工作流列表行数: $(cat ${all_workflows_list} | wc -l)"
+        
+        # 包含需要保留关键词的工作流
+        keep_keyword_workflows_list="json_keep_keyword_workflows_list"
+        # 删除匹配关键词需要保留的工作流
+        if [[ "${#workflows_keep_keyword[@]}" -ge "1" && -s "${all_workflows_list}" ]]; then
+            # 匹配符合关键词的工作流列表
+            echo -e "${INFO} (2.4.1) 过滤工作流运行关键词: [ $(echo ${workflows_keep_keyword[@]} | xargs) ]"
+            echo "" > "${keep_keyword_workflows_list}"
+            
+            for keyword in "${workflows_keep_keyword[@]}"; do
+                escaped_keyword=$(escape_regex "$keyword")
+                echo -e "${INFO} (2.4.2) 处理关键词: [ ${keyword} ] -> [ ${escaped_keyword} ]"
+                cat "${all_workflows_list}" | jq -r '.name' | grep -E "${escaped_keyword}" >> "${keep_keyword_workflows_list}"
+            done
+            
+            if [[ -s "${keep_keyword_workflows_list}" ]]; then
+                echo -e "${INFO} (2.4.3) 符合条件的工作流数量: $(cat ${keep_keyword_workflows_list} | wc -l)"
+                [[ "${out_log}" == "true" ]] && {
+                    echo -e "${INFO} (2.4.4) 符合条件的工作流列表:\n$(cat ${keep_keyword_workflows_list})"
+                }
+
+                # 删除需要保留的工作流（逐行处理，避免正则冲突）
+                while read -r line; do
+                    escaped_line=$(escape_regex "$line")
+                    sed -i "/\"name\": \"${escaped_line}\"/d" "${all_workflows_list}"
+                done < "${keep_keyword_workflows_list}"
+                
+                echo -e "${SUCCESS} (2.4.5) 关键词过滤成功。剩余工作流数量: $(cat ${all_workflows_list} | wc -l)"
+            else
+                echo -e "${INFO} (2.4.6) 没有匹配到任何关键词工作流。"
+            fi
         else
-            # 按日期排序并保留最新的工作流
-            cat ${all_workflows_list} | jq -s 'sort_by(.date | fromdateiso8601) | reverse' >${keep_workflows_list}
-            head -n ${workflows_keep_latest} ${keep_workflows_list} >${keep_workflows_list}.tmp
-            mv ${keep_workflows_list}.tmp ${keep_workflows_list}
+            echo -e "${NOTE} (2.4.7) 关键字符为空，跳过过滤操作。"
+        fi
 
-            echo -e "${INFO} (2.5.2) 保留工作流运行列表生成成功。"
-            [[ "${out_log}" == "true" && -s "${keep_workflows_list}" ]] && {
-                echo -e "${INFO} (2.5.3) 保留工作流列表:\n$(cat ${keep_workflows_list})"
-            }
+        # 生成需要保留的工作流列表
+        keep_workflows_list="json_keep_workflows_list"
+        if [[ -s "${all_workflows_list}" ]]; then
+            if [[ "${workflows_keep_latest}" -eq "0" ]]; then
+                echo -e "${INFO} (2.5.1) 删除所有工作流运行。"
+            else
+                # 按日期排序并保留最新的工作流
+                cp "${all_workflows_list}" "${keep_workflows_list}"
+                # 使用jq确保日期排序正确
+                jq -s 'sort_by(.date | fromdateiso8601) | reverse' "${keep_workflows_list}" > "${keep_workflows_list}.tmp"
+                mv "${keep_workflows_list}.tmp" "${keep_workflows_list}"
+                
+                head -n "${workflows_keep_latest}" "${keep_workflows_list}" > "${keep_workflows_list}.tmp"
+                mv "${keep_workflows_list}.tmp" "${keep_workflows_list}"
 
-            # 从全量列表中删除需要保留的工作流
-            sed -i "1,${workflows_keep_latest}d" ${all_workflows_list}
+                echo -e "${INFO} (2.5.2) 保留工作流运行列表生成成功。保留数量: ${workflows_keep_latest}"
+                [[ "${out_log}" == "true" && -s "${keep_workflows_list}" ]] && {
+                    echo -e "${INFO} (2.5.3) 保留工作流列表:\n$(cat ${keep_workflows_list})"
+                }
+
+                # 从全量列表中删除需要保留的工作流
+                sed -i "1,${workflows_keep_latest}d" "${all_workflows_list}"
+                echo -e "${INFO} (2.5.4) 剩余待删除工作流数量: $(cat ${all_workflows_list} | wc -l)"
+            fi
+        else
+            echo -e "${NOTE} (2.5.5) 工作流运行列表为空，跳过。"
+        fi
+
+        # 删除列表
+        if [[ -s "${all_workflows_list}" ]]; then
+            [[ "${out_log}" == "true" ]] && echo -e "${INFO} (2.5.6) 删除工作流列表:\n$(cat ${all_workflows_list})"
+        else
+            echo -e "${NOTE} (2.5.7) 删除工作流列表为空，跳过。"
         fi
     else
-        echo -e "${NOTE} (2.5.4) 工作流运行列表为空，跳过。"
-    fi
-
-    # 删除列表
-    if [[ -s "${all_workflows_list}" ]]; then
-        [[ "${out_log}" == "true" ]] && echo -e "${INFO} (2.5.5) 删除工作流列表:\n$(cat ${all_workflows_list})"
-    else
-        echo -e "${NOTE} (2.5.6) 删除工作流列表为空，跳过。"
+        echo -e "${NOTE} (2.4.8) 工作流列表为空，跳过。"
     fi
 
     echo -e ""
