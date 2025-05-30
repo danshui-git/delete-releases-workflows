@@ -396,15 +396,25 @@ out_workflows_list() {
     fi
 
     # 1. 关键词过滤：保留包含关键词的工作流
-    if [[ "${#workflows_keep_keyword[@]}" -ge 1 ]]; then
-        echo -e "${INFO} (2.4.1) 工作流过滤关键词: [ $(echo ${workflows_keep_keyword[@]} | xargs) ]"
-        jq -r '.name' "${all_workflows_list}" | grep -E "$(printf '|%s' "${workflows_keep_keyword[@]}")" >"${keep_keyword_workflows_list}"
+    if [[ "${#workflows_keep_keyword[@]}" -ge "1" && -s "${all_workflows_list}" ]]; then
+        echo -e "${INFO} (2.4.1) Filter Workflows runs keywords: [ $(echo ${workflows_keep_keyword[@]} | xargs) ]"
+        
+        # 生成 grep 正则表达式（如 "word1\|word2\|word3"）
+        local keyword_regex=""
+        for keyword in "${workflows_keep_keyword[@]}"; do
+            [[ -n "$keyword_regex" ]] && keyword_regex+="|"
+            keyword_regex+="$keyword"
+        done
+        
+        # 过滤出包含任意关键词的工作流
+        jq -r '.name' "${all_workflows_list}" | grep -E "$keyword_regex" >"${keep_keyword_workflows_list}"
 
         if [[ -s "${keep_keyword_workflows_list}" ]]; then
-            # 从原始列表中移除关键词匹配的工作流（反向过滤：删除包含关键词的条目）
+            # 从原始列表中移除关键词匹配的工作流
             local temp_list="$(mktemp)"
             while IFS= read -r line; do
-                if ! grep -qF "$line" "${keep_keyword_workflows_list}"; then
+                local workflow_name=$(echo "$line" | jq -r '.name')
+                if ! echo "$workflow_name" | grep -qE "$keyword_regex"; then
                     echo "$line" >>"${temp_list}"
                 fi
             done <"${all_workflows_list}"
@@ -429,7 +439,7 @@ out_workflows_list() {
         echo -e "${INFO} (2.5.1) 保留数量为 0，将删除所有过滤后的工作流"
     fi
 
-    # 3. 生成删除列表（原始列表减去保留列表）
+    # 3. 生成删除列表
     if [[ -s "${all_workflows_list}" ]]; then
         # 提取保留的 ID
         local keep_ids=$(jq -r '.id' "${keep_workflows_list}")
