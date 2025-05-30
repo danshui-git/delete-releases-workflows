@@ -63,6 +63,12 @@ escape_regex() {
     echo "$text" | sed -e 's/[.[\*^$+?(){}\\|]/\\&/g'
 }
 
+# 将关键词中的斜杠转换为空格
+convert_slash_to_space() {
+    local text="$1"
+    echo "${text//\// }"
+}
+
 init_var() {
     echo -e "${STEPS} 开始初始化变量..."
 
@@ -95,7 +101,14 @@ init_var() {
     echo -e "${INFO} delete_tags: [ ${delete_tags} ]"
     echo -e "${INFO} prerelease_option: [ ${prerelease_option} ]"
     echo -e "${INFO} releases_keep_latest: [ ${releases_keep_latest} ]"
-    echo -e "${INFO} releases_keep_keyword: [ $(echo ${releases_keep_keyword[@]} | xargs) ]"
+    
+    # 转换并显示处理后的关键词
+    local converted_releases_keywords=()
+    for keyword in "${releases_keep_keyword[@]}"; do
+        converted_releases_keywords+=("$(convert_slash_to_space "$keyword")")
+    done
+    echo -e "${INFO} releases_keep_keyword: [ $(echo ${releases_keep_keyword[@]} | xargs) ] -> [ $(echo ${converted_releases_keywords[@]} | xargs) ]"
+    
     echo -e "${INFO} max_releases_fetch: [ ${max_releases_fetch} ]"
     echo -e "${INFO} delete_workflows: [ ${delete_workflows} ]"
     echo -e "${INFO} workflows_keep_latest: [ ${workflows_keep_latest} ]"
@@ -216,8 +229,10 @@ out_releases_list() {
         
         # 收集所有需要保留的标签
         for keyword in "${releases_keep_keyword[@]}"; do
-            escaped_keyword=$(escape_regex "$keyword")
-            echo -e "${INFO} (1.5.2) 处理关键词: [ ${keyword} ] -> [ ${escaped_keyword} ]"
+            # 转换斜杠为空格
+            converted_keyword=$(convert_slash_to_space "$keyword")
+            escaped_keyword=$(escape_regex "$converted_keyword")
+            echo -e "${INFO} (1.5.2) 处理关键词: [ ${keyword} ] -> [ ${converted_keyword} ] -> [ ${escaped_keyword} ]"
             cat "${all_releases_list}" | jq -r '.tag_name' | grep -E "${escaped_keyword}" >> "${keep_releases_keyword_list}"
         done
         
@@ -366,6 +381,14 @@ get_workflows_list() {
             break
         }
 
+        # 验证JSON结构是否符合预期
+        if ! echo "$response" | jq -e '.workflow_runs' >/dev/null 2>&1; then
+            echo -e "${ERROR} (2.1.${page}) 工作流JSON结构不符合预期，跳过此页"
+            echo "$response" > "workflow_page_${page}_error.json"
+            echo -e "${INFO} (2.1.${page}) 错误详情已保存到 workflow_page_${page}_error.json"
+            continue
+        fi
+
         # 获取当前页返回的结果数量
         get_results_length="$(echo "${response}" | jq -r '.workflow_runs | length')"
         echo -e "${INFO} (2.1.${page}) 查询 [ 第 ${page} 页 ]，返回 [ ${get_results_length} ] 条结果。"
@@ -376,24 +399,23 @@ get_workflows_list() {
             break
         fi
 
-        # 限制本次处理的数量
-        if [[ "$get_results_length" -gt "$remaining" ]]; then
-            echo "${response}" |
-                jq -c ".workflow_runs[:$remaining] | 
-                      map(select(.status != \"in_progress\" and .status != \"queued\")) | 
-                      sort_by(.updated_at | fromdateiso8601) | reverse | 
-                      .[] | {date: .updated_at, id: .id, name: .name}" \
-                    >>"${all_workflows_list}"
-            current_count=$(( current_count + remaining ))
-            break
+        # 提取并处理工作流数据，增加错误处理
+        page_data="$(echo "${response}" | jq -c '.workflow_runs[] | 
+            select(.status != "in_progress" and .status != "queued") | 
+            {date: .updated_at, id: .id, name: .name}')" || {
+                echo -e "${ERROR} (2.1.${page}) 处理工作流数据失败，跳过此页"
+                continue
+            }
+
+        # 验证提取的数据是否有效
+        if [[ -n "$page_data" ]]; then
+            # 按日期排序并添加到结果文件
+            echo "$page_data" | jq -s 'sort_by(.date | fromdateiso8601) | reverse | .[]' >> "${all_workflows_list}"
+            processed_count=$(echo "$page_data" | grep -c '^')
+            current_count=$(( current_count + processed_count ))
+            echo -e "${INFO} (2.1.${page}) 成功处理 [ ${processed_count} ] 条工作流数据"
         else
-            echo "${response}" |
-                jq -c '.workflow_runs[] | 
-                      select(.status != "in_progress" and .status != "queued") | 
-                      sort_by(.updated_at | fromdateiso8601) | reverse | 
-                      .[] | {date: .updated_at, id: .id, name: .name}' \
-                    >>"${all_workflows_list}"
-            current_count=$(( current_count + get_results_length ))
+            echo -e "${INFO} (2.1.${page}) 没有可处理的工作流数据"
         fi
 
         # 如果当前页返回的数量小于请求数量，说明已获取全部数据
