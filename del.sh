@@ -523,6 +523,4 @@ else
     echo -e "${STEPS} 不删除工作流"
 fi
 
-# 显示所有流程完成提示
-echo -e "${SUCCESS} 所有流程成功完成"
 wait
