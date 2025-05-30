@@ -511,7 +511,7 @@ if [[ "${delete_releases}" == "true" ]]; then
     del_releases_file
     del_releases_tags
 else
-    echo -e "${STEPS} 不删除发布和标签"
+    echo -e "${STEPS} 不启用删除发布和标签"
 fi
 
 # 删除工作流
@@ -520,7 +520,7 @@ if [[ "${delete_workflows}" == "true" ]]; then
     out_workflows_list
     del_workflows_runs
 else
-    echo -e "${STEPS} 不删除工作流"
+    echo -e "${STEPS} 不启用删除工作流"
 fi
 
 wait
