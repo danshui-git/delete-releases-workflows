@@ -97,8 +97,14 @@ init_var() {
     validate_positive_integer "$max_releases_fetch" "max_releases_fetch" 1000
     validate_positive_integer "$max_workflows_fetch" "max_workflows_fetch" 1000
     
-    # 创建临时目录
-    tmp_dir=$(mktemp -d)
+    # 在GitHub Actions环境中使用正确的临时目录
+    if [[ -n "$GITHUB_WORKSPACE" ]]; then
+        tmp_dir="$GITHUB_WORKSPACE/tmp"
+        mkdir -p "${tmp_dir}"
+    else
+        tmp_dir=$(mktemp -d)
+    fi
+    
     if [[ ! -d "$tmp_dir" ]]; then
         error_msg "无法创建临时目录"
     fi
@@ -198,6 +204,7 @@ get_releases_list() {
 out_releases_list() {
     echo -e "${STEPS} 开始输出发布列表..."
 
+    all_releases_list="${tmp_dir}/json_api_releases"
     if [[ ! -s "${all_releases_list}" ]]; then
         echo -e "${NOTE} (1.4.5) 发布列表为空，跳过"
         return
@@ -433,6 +440,7 @@ get_workflows_list() {
 out_workflows_list() {
     echo -e "${STEPS} 开始输出工作流列表..."
 
+    all_workflows_list="${tmp_dir}/json_api_workflows"
     if [[ ! -s "${all_workflows_list}" ]]; then
         echo -e "${NOTE} 工作流列表为空，跳过"
         return
