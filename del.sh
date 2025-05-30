@@ -499,7 +499,7 @@ del_workflows_runs() {
 }
 
 # 显示欢迎信息
-echo -e "${STEPS} 欢迎使用删除旧发布和工作流工具!"
+echo -e "${INFO} 欢迎使用删除旧发布和工作流工具!"
 
 # 按顺序执行相关操作
 init_var "${@}"
