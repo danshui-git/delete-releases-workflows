@@ -57,108 +57,56 @@ init_var() {
     while [[ -n "${1}" ]]; do
         case "${1}" in
         -r | --repo)
-            if [[ -n "${2}" ]]; then
                 repo="${2}"
                 shift
-            else
-                error_msg "参数 -r 的值无效 [ ${2} ]!"
-            fi
             ;;
         -a | --delete_releases)
-            if [[ -n "${2}" ]]; then
                 delete_releases="${2}"
                 shift
-            else
-                error_msg "参数 -a 的值无效 [ ${2} ]!"
-            fi
             ;;
         -t | --delete_tags)
-            if [[ -n "${2}" ]]; then
                 delete_tags="${2}"
                 shift
-            else
-                error_msg "参数 -t 的值无效 [ ${2} ]!"
-            fi
             ;;
         -p | --prerelease_option)
-            if [[ -n "${2}" ]]; then
                 prerelease_option="${2}"
                 shift
-            else
-                error_msg "参数 -p 的值无效 [ ${2} ]!"
-            fi
             ;;
         -l | --releases_keep_latest)
-            if [[ -n "${2}" ]]; then
                 releases_keep_latest="${2}"
                 shift
-            else
-                error_msg "参数 -l 的值无效 [ ${2} ]!"
-            fi
             ;;
         -w | --releases_keep_keyword)
-            if [[ -n "${2}" ]]; then
                 IFS="/" read -r -a releases_keep_keyword <<< "${2}"
                 shift
-            else
-                error_msg "参数 -w 的值无效 [ ${2} ]!"
-            fi
             ;;
         -c | --max_releases_fetch)
-            if [[ -n "${2}" ]]; then
                 max_releases_fetch="${2}"
                 shift
-            else
-                error_msg "参数 -c 的值无效 [ ${2} ]!"
-            fi
             ;;
         -s | --delete_workflows)
-            if [[ -n "${2}" ]]; then
                 delete_workflows="${2}"
                 shift
-            else
-                error_msg "参数 -s 的值无效 [ ${2} ]!"
-            fi
             ;;
         -d | --workflows_keep_latest)
-            if [[ -n "${2}" ]]; then
                 workflows_keep_latest="${2}"
                 shift
-            else
-                error_msg "参数 -d 的值无效 [ ${2} ]!"
-            fi
             ;;
         -k | --workflows_keep_keyword)
-            if [[ -n "${2}" ]]; then
                 IFS="/" read -r -a workflows_keep_keyword <<< "${2}"
                 shift
-            else
-                error_msg "参数 -k 的值无效 [ ${2} ]!"
-            fi
             ;;
         -h | --max_workflows_fetch)
-            if [[ -n "${2}" ]]; then
                 max_workflows_fetch="${2}"
                 shift
-            else
-                error_msg "参数 -h 的值无效 [ ${2} ]!"
-            fi
             ;;
         -g | --gh_token)
-            if [[ -n "${2}" ]]; then
                 gh_token="${2}"
                 shift
-            else
-                error_msg "参数 -g 的值无效 [ ${2} ]!"
-            fi
             ;;
         -o | --out_log)
-            if [[ -n "${2}" ]]; then
                 out_log="${2}"
                 shift
-            else
-                error_msg "参数 -o 的值无效 [ ${2} ]!"
-            fi
             ;;
         *)
             error_msg "无效选项 [ ${1} ]!"
