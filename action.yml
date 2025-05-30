@@ -64,7 +64,6 @@ runs:
         cd "$GITHUB_ACTION_PATH"
 
         # 所有应用参数，同时删除空白字符
-        gh_token="${{ inputs.gh_token }}"
         delete_releases=$(echo "${{ inputs.delete_releases }}" | tr -d '[:space:]')
         delete_tags=$(echo "${{ inputs.delete_tags }}" | tr -d '[:space:]')
         prerelease_option=$(echo "${{ inputs.prerelease_option }}" | tr -d '[:space:]')
@@ -77,6 +76,7 @@ runs:
         max_workflows_fetch=$(echo "${{ inputs.max_workflows_fetch }}" | tr -d '[:space:]')
         out_log=$(echo "${{ inputs.out_log }}" | tr -d '[:space:]')
         repo=$(echo "${{ inputs.repo }}" | tr -d '[:space:]}')
+        gh_token="${{ inputs.gh_token }}"
 
         # 错误提示颜色
         ERROR="[\033[91m ERROR \033[0m]"
