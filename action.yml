@@ -60,7 +60,6 @@ runs:
   steps:
     - shell: bash
       run: |
-        # Use GITHUB_WORKSPACE to get the current workspace directory
         GITHUB_ACTION_PATH="${{ github.action_path }}"
         cd "$GITHUB_ACTION_PATH"
 
