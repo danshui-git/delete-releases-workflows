@@ -91,8 +91,19 @@ runs:
         [[ -z "${delete_releases}" ]] && error_msg "必须设置 [ delete_releases ] 参数，且参数为 'true' 或 'false'"
         [[ -z "${delete_workflows}" ]] && error_msg "必须设置 [ delete_workflows ] 参数，且参数为 'true' 或 'false'"
         [[ ! -f "del.sh" ]] && error_msg "未知原因，找不到 [ del.sh ] 执行文件"
+
+        delete_releases="${delete_releases//[[:space:]]/}"
+        delete_tags="${delete_tags//[[:space:]]/}"
+        prerelease_option="${prerelease_option//[[:space:]]/}"
+        releases_keep_latest="${releases_keep_latest//[[:space:]]/}"
         releases_keep_keyword="${releases_keep_keyword//[[:space:]]/}"
+        max_releases_fetch="${max_releases_fetch//[[:space:]]/}"
+        delete_workflows="${delete_workflows//[[:space:]]/}"
+        workflows_keep_latest="${workflows_keep_latest//[[:space:]]/}"
         workflows_keep_keyword="${workflows_keep_keyword//[[:space:]]/}"
+        max_workflows_fetch="${max_workflows_fetch//[[:space:]]/}"
+        out_log="${out_log//[[:space:]]/}"
+        repo="${repo//[[:space:]]/}"
 
         # 构建命令行参数
         make_command=""
