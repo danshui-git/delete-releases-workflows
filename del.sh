@@ -506,6 +506,10 @@ out_workflows_list() {
             echo "" > "${keep_keyword_workflows_list}"
             
             for keyword in "${workflows_keep_keyword[@]}"; do
+                if [[ -z "$keyword" ]]; then
+                    echo -e "${INFO} (2.4.2) 跳过空关键词: [ ${keyword} ]"
+                    continue
+                fi
                 escaped_keyword=$(escape_regex "$keyword")
                 echo -e "${INFO} (2.4.2) 处理关键词: [ ${keyword} ] -> [ ${escaped_keyword} ]"
                 # 使用jq而非grep，避免特殊字符问题
