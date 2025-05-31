@@ -260,7 +260,7 @@ filter_releases() {
             echo -e "${INFO} (1.6.1) 将删除所有剩余发布"
             cp "${filtered_releases_list}" "${final_releases_list}"
         else
-            echo -e "${INFO} (1.6.2) 保留最新的 ${releases_keep_latest} 个发布"
+            echo -e "${INFO} (1.6.2) 保留最新的[ ${releases_keep_latest} ]个发布"
             
             # 获取总数量
             total_count=$(jq 'length' "${filtered_releases_list}")
@@ -281,7 +281,7 @@ filter_releases() {
                     jq -c ".[${delete_count}:]" "${filtered_releases_list}.sorted"
                 fi
             else
-                echo -e "${NOTE} (1.6.4) 发布数量不足 ${releases_keep_latest}，全部保留"
+                echo -e "${NOTE} (1.6.4) 发布数量不足[ ${releases_keep_latest} ]，将全部发布保留"
                 > "${final_releases_list}"
             fi
         fi
@@ -317,7 +317,7 @@ delete_releases() {
             release_id=$(echo "${release}" | jq -r '.id')
             tag_name=$(echo "${release}" | jq -r '.tag_name')
             
-            echo -e "${INFO} (1.7.1) 正在删除发布 ${count}/${total}"
+            echo -e "${INFO} (1.7.1) 正在删除发布[ ${count}/${total} ]"
             
             # 删除发布
             response=$(curl -s -o /dev/null -w "%{http_code}" \
@@ -329,7 +329,7 @@ delete_releases() {
             )
                 
             if [[ "$response" -eq 204 ]]; then
-                echo -e "${SUCCESS} (1.7.2) 删除发布 ${count}、Tag=${tag_name} (ID=${release_id}) 成功"
+                echo -e "${SUCCESS} (1.7.2) 删除发布 ${count}、${tag_name} (ID: ${release_id}) 成功"
                 
                 # 如果启用，删除关联的标签
                 if [[ "${delete_tags}" == "true" ]]; then
@@ -350,11 +350,11 @@ delete_releases() {
                     fi
                 fi
             else
-                echo -e "${ERROR} (1.7.6) 删除发布 ${count}、Tag=${tag_name} (ID=${release_id}) 失败: HTTP ${response}"
+                echo -e "${ERROR} (1.7.6) 删除发布 ${count}、${tag_name} (ID: ${release_id}) 失败: HTTP ${response}"
             fi
         done < "${all_releases_list}"
         
-        echo -e "${SUCCESS} (1.7.7) 发布删除完成 ${count}/${total}"
+        echo -e "${SUCCESS} (1.7.7) 发布删除完成[ ${count}/${total} ]"
     else
         echo -e "${NOTE} (1.7.8) 没有需要删除的发布，跳过"
     fi
@@ -485,7 +485,7 @@ filter_workflows() {
             echo -e "${INFO} (2.5.1) 将删除所有剩余工作流"
             cp "${filtered_workflows_list}" "${final_workflows_list}"
         else
-            echo -e "${INFO} (2.5.2) 保留最新的 ${workflows_keep_latest} 个工作流"
+            echo -e "${INFO} (2.5.2) 保留最新的[ ${workflows_keep_latest} ]个工作流"
             
             # 获取总数量
             total_count=$(jq 'length' "${filtered_workflows_list}")
@@ -506,7 +506,7 @@ filter_workflows() {
                     jq -c ".[${delete_count}:]" "${filtered_workflows_list}.sorted"
                 fi
             else
-                echo -e "${NOTE} (2.5.4) 工作流数量不足 ${workflows_keep_latest}，全部保留"
+                echo -e "${NOTE} (2.5.4) 工作流数量不足[ ${workflows_keep_latest} ]，将全部工作流保留"
                 > "${final_workflows_list}"
             fi
         fi
@@ -542,7 +542,7 @@ delete_workflows() {
             local workflow_id=$(echo "${workflow}" | jq -r '.id')
             local workflow_name=$(echo "${workflow}" | jq -r '.name')
             
-            echo -e "${INFO} (2.6.1) 正在删除工作流 ${count}/${total}"
+            echo -e "${INFO} (2.6.1) 正在删除工作流[ ${count}/${total} ]"
             
             response=$(curl -s -o /dev/null -w "%{http_code}" \
                 -X DELETE \
@@ -553,13 +553,13 @@ delete_workflows() {
             )
                 
             if [[ "$response" -eq 204 ]]; then
-                echo -e "${SUCCESS} (2.6.2) 工作流 ${count}、${workflow_name} (ID: ${workflow_id}) 删除成功"
+                echo -e "${SUCCESS} (2.6.2) 删除工作流 ${count}、${workflow_name} (ID: ${workflow_id}) 成功"
             else
-                echo -e "${ERROR} (2.6.3) 工作流 ${count}、${workflow_name} (ID: ${workflow_id}) 删除失败: HTTP ${response}"
+                echo -e "${ERROR} (2.6.3) 删除工作流 ${count}、${workflow_name} (ID: ${workflow_id}) 失败: HTTP ${response}"
             fi
         done < <(jq -c '.[]' "${all_workflows_list}")
         
-        echo -e "${SUCCESS} (2.6.4) 工作流删除完成 ${count}/${total}"
+        echo -e "${SUCCESS} (2.6.4) 工作流删除完成[ ${count}/${total} ]"
     else
         echo -e "${NOTE} (2.6.5) 没有需要删除的工作流"
     fi
