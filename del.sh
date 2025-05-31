@@ -30,7 +30,6 @@ mkdir -p "${TMP_DIR}"
 
 cleanup() {
     rm -rf "${TMP_DIR}"
-    echo -e "${INFO} 已清理临时文件"
 }
 
 error_msg() {
