@@ -329,7 +329,7 @@ delete_releases() {
             )
                 
             if [[ "$response" -eq 204 ]]; then
-                echo -e "${SUCCESS} (1.7.2) 发布 ${count}、ID=${release_id}, Tag=${tag_name} 删除成功"
+                echo -e "${SUCCESS} (1.7.2) 删除发布 ${count}、Tag=${tag_name} (ID=${release_id}) 成功"
                 
                 # 如果启用，删除关联的标签
                 if [[ "${delete_tags}" == "true" ]]; then
@@ -350,11 +350,11 @@ delete_releases() {
                     fi
                 fi
             else
-                echo -e "${ERROR} (1.7.6) 删除发布 ${count}、ID=${release_id}, Tag=${tag_name} 失败: HTTP ${response}"
+                echo -e "${ERROR} (1.7.6) 删除发布 ${count}、Tag=${tag_name} (ID=${release_id}) 失败: HTTP ${response}"
             fi
         done < "${all_releases_list}"
         
-        echo -e "${SUCCESS} (1.7.7) 发布删除完成"
+        echo -e "${SUCCESS} (1.7.7) 发布删除完成 ${count}/${total}"
     else
         echo -e "${NOTE} (1.7.8) 没有需要删除的发布，跳过"
     fi
@@ -542,7 +542,7 @@ delete_workflows() {
             local workflow_id=$(echo "${workflow}" | jq -r '.id')
             local workflow_name=$(echo "${workflow}" | jq -r '.name')
             
-            echo -e "${INFO} (2.6.1) 正在删除工作流 ${count}/${total}: ${workflow_name} (ID: ${workflow_id})"
+            echo -e "${INFO} (2.6.1) 正在删除工作流 ${count}/${total}"
             
             response=$(curl -s -o /dev/null -w "%{http_code}" \
                 -X DELETE \
@@ -553,13 +553,13 @@ delete_workflows() {
             )
                 
             if [[ "$response" -eq 204 ]]; then
-                echo -e "${SUCCESS} (2.6.2) 删除成功"
+                echo -e "${SUCCESS} (2.6.2) 工作流 ${count}、${workflow_name} (ID: ${workflow_id}) 删除成功"
             else
-                echo -e "${ERROR} (2.6.3) 删除失败: HTTP ${response}"
+                echo -e "${ERROR} (2.6.3) 工作流 ${count}、${workflow_name} (ID: ${workflow_id}) 删除失败: HTTP ${response}"
             fi
         done < <(jq -c '.[]' "${all_workflows_list}")
         
-        echo -e "${SUCCESS} (2.6.4) 工作流删除完成"
+        echo -e "${SUCCESS} (2.6.4) 工作流删除完成 ${count}/${total}"
     else
         echo -e "${NOTE} (2.6.5) 没有需要删除的工作流"
     fi
