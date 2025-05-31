@@ -54,14 +54,54 @@ inputs:
     description: "Maximum number of workflow runs to fetch in total"
     required: false
     default: "200"
+  debug:
+    description: "Enable debug output"
+    required: false
+    default: "false"
 
 runs:
   using: "composite"
   steps:
-    - shell: bash
+    - name: Ensure proper jq installation
+      shell: bash
+      run: |
+        # Receive input parameters related to releases
+        INFO="[\033[94m 信息 \033[0m]"
+        ERROR="[\033[91m ERROR \033[0m]"
+        error_msg() {
+            echo -e "${ERROR} ${1}"
+            exit 1
+        }
+        
+        # 根据DEBUG变量决定是否静默
+        if [ "$DEBUG" != "true" ]; then
+          exec >/dev/null 2>&1
+        fi
+
+        if command -v jq &> /dev/null; then
+          echo -e "${INFO} 正在御载jq..."
+          sudo snap remove jq || true
+          sudo apt-get remove -y jq || true
+        fi
+
+        echo -e "${INFO} 开始安装jq..."
+        sudo apt-get -qq update
+        sudo apt-get -qq install -y jq
+
+        if ! command -v jq &> /dev/null; then
+          error_msg "jq 安装失败，退出脚本"
+        fi
+        echo -e "${INFO} jq 安装完毕 $(which jq)"
+      env:
+        DEBIAN_FRONTEND: noninteractive
+        DEBUG: ${{ inputs.debug || 'false' }}
+
+    - name: Run cleanup script
+      shell: bash
       run: |
         GITHUB_ACTION_PATH="${{ github.action_path }}"
         cd "$GITHUB_ACTION_PATH"
+        export PATH="/usr/bin:$PATH"
 
         # 所有应用参数，同时删除空白字符(包括空格、制表符和换行符)
         delete_releases=$(echo "${{ inputs.delete_releases }}" | tr -d '[:space:]')
@@ -78,11 +118,11 @@ runs:
         repo=$(echo "${{ inputs.repo }}" | tr -d '[:space:]}')
         gh_token="${{ inputs.gh_token }}"
 
-        # 错误提示颜色
+        # 错误提示字体颜色
         ERROR="[\033[91m ERROR \033[0m]"
         error_msg() {
             echo -e "${ERROR} ${1}"
-            exit 0
+            exit 1
         }
 
         # 验证必需参数,如果参数为空则会停止脚本运行
