@@ -141,6 +141,14 @@ runs:
           fi
         }
 
+        # 验证关键词
+        validate_keyword() {
+          local var="$1" param_name="$2"
+          if [[ "$var" =~ ^(true|false)$ ]]; then
+            declare -g "$param_name"=""
+          fi
+        }
+
         # 验证非负整数
         validate_non_negative_integer() {
           local var="$1" param_name="$2" max="${3:-1000}"
@@ -205,6 +213,9 @@ runs:
         validate_boolean "$out_log" "out_log"
         
         validate_prerelease "$prerelease_option" "prerelease_option"
+
+        validate_keyword "$releases_keep_keyword" "releases_keep_keyword"
+        validate_keyword "$workflows_keep_keyword" "workflows_keep_keyword"
         
         validate_non_negative_integer "$releases_keep_latest" "releases_keep_latest"
         validate_non_negative_integer "$workflows_keep_latest" "workflows_keep_latest"
