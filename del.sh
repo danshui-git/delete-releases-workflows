@@ -179,25 +179,24 @@ get_releases_list() {
 
     # 按日期排序（从旧到新）
     if [[ -s "${all_releases_list}" ]]; then
-        # 将多行JSON对象转换为数组
-        jq -s 'sort_by(.date)' "${all_releases_list}" > "${all_releases_list}.tmp"
+        jq -s 'sort_by(.date)' "${all_releases_list}" | jq -c '.[]' > "${all_releases_list}.tmp"
         mv "${all_releases_list}.tmp" "${all_releases_list}"
         
         # 应用max_releases_fetch限制
-        if [[ "$(jq 'length' "${all_releases_list}")" -gt "${max_releases_fetch}" ]]; then
+        if [[ "$(wc -l < "${all_releases_list}")" -gt "${max_releases_fetch}" ]]; then
             echo -e "${INFO} (1.3.1) 发布数量超过max_releases_fetch限制 [${max_releases_fetch}]，将保留最旧的${max_releases_fetch}条"
-            jq ".[0:${max_releases_fetch}]" "${all_releases_list}" > "${all_releases_list}.tmp"
+            head -n "${max_releases_fetch}" "${all_releases_list}" > "${all_releases_list}.tmp"
             mv "${all_releases_list}.tmp" "${all_releases_list}"
         fi
         
         # 打印结果日志
-        actual_count=$(jq 'length' "${all_releases_list}")
+        actual_count=$(wc -l < "${all_releases_list}")
         echo -e "${INFO} (1.3.2) 获取发布信息请求成功"
         echo -e "${INFO} (1.3.3) 获取到的发布总数: [ ${actual_count} ]"
         if [[ "${out_log}" == "true" ]]; then
             if [[ -s "${all_releases_list}" ]]; then
                 echo -e "${DISPLAY} (1.3.4) 所有发布列表:"
-                jq -c '.[]' "${all_releases_list}"
+                cat "${all_releases_list}" | jq -c .
                 echo -e ""
             else
                 echo -e "${NOTE} (1.3.5) 发布列表为空"
@@ -219,9 +218,11 @@ filter_releases() {
 
     # 确保文件是JSON数组格式
     if [[ -s "${all_releases_list}" ]]; then
-        # 转换为数组格式
-        jq -s '.' "${all_releases_list}" > "${all_releases_list}.tmp"
-        mv "${all_releases_list}.tmp" "${all_releases_list}"
+        # 如果文件不是数组格式，转换为数组
+        if ! jq -e '. | type == "array"' "${all_releases_list}" &>/dev/null; then
+            jq -s '.' "${all_releases_list}" > "${all_releases_list}.tmp"
+            mv "${all_releases_list}.tmp" "${all_releases_list}"
+        fi
     fi
 
     # 1. 处理关键词过滤（仅在有关键词时执行）
@@ -294,14 +295,11 @@ filter_releases() {
         echo -e "${NOTE} (1.6.6) 无发布需要处理"
     fi
 
-    # 更新最终列表 - 修复部分
+    # 更新最终列表
     if [[ -s "${final_releases_list}" ]]; then
-        # 确保我们处理的是对象数组
-        jq -s '.' "${final_releases_list}" > "${final_releases_list}.tmp"
-        mv "${final_releases_list}.tmp" "${final_releases_list}"
-        cp "${final_releases_list}" "${all_releases_list}"
+        mv "${final_releases_list}" "${all_releases_list}"
     else
-        echo '[]' > "${all_releases_list}"
+        > "${all_releases_list}"
     fi
 }
 
@@ -311,28 +309,15 @@ delete_releases() {
     all_releases_list="${TMP_DIR}/A_all_releases_list.json"
     
     if [[ -s "${all_releases_list}" ]]; then
-        # 确保文件是有效的JSON数组
-        if ! jq -e '.' "${all_releases_list}" &>/dev/null; then
-            echo -e "${ERROR} (1.7.0) 发布列表JSON格式无效"
-            return
-        fi
-
-        total=$(jq 'length' "${all_releases_list}")
+        total=$(wc -l < "${all_releases_list}")
         count=0
         
-        # 使用jq迭代数组元素
-        while IFS= read -r release; do
+        while read -r release; do
             count=$((count + 1))
             release_id=$(echo "${release}" | jq -r '.id')
             tag_name=$(echo "${release}" | jq -r '.tag_name')
             
-            # 验证数据
-            if [[ -z "${release_id}" || "${release_id}" == "null" || -z "${tag_name}" || "${tag_name}" == "null" ]]; then
-                echo -e "${ERROR} (1.7.1) 无效的发布数据: ${release}"
-                continue
-            fi
-            
-            echo -e "${INFO} (1.7.2) 正在删除发布[ ${count}/${total} ]: ${tag_name} (ID: ${release_id})"
+            echo -e "${INFO} (1.7.1) 正在删除发布[ ${count}/${total} ]"
             
             # 删除发布
             response=$(curl -s -o /dev/null -w "%{http_code}" \
@@ -344,11 +329,11 @@ delete_releases() {
             )
                 
             if [[ "$response" -eq 204 ]]; then
-                echo -e "${SUCCESS} (1.7.3) 删除发布 ${count}、${tag_name} (ID: ${release_id}) 成功"
+                echo -e "${SUCCESS} (1.7.2) 删除发布 ${count}、${tag_name} (ID: ${release_id}) 成功"
                 
                 # 如果启用，删除关联的标签
                 if [[ "${delete_tags}" == "true" ]]; then
-                    echo -e "${INFO} (1.7.4) 正在删除关联标签: ${tag_name}"
+                    echo -e "${INFO} (1.7.3) 正在删除关联标签: ${tag_name}"
                     
                     tag_response=$(curl -s -o /dev/null -w "%{http_code}" \
                         -X DELETE \
@@ -359,19 +344,19 @@ delete_releases() {
                     )
                     
                     if [[ "$tag_response" -eq 204 ]]; then
-                        echo -e "${SUCCESS} (1.7.5) 标签 ${tag_name} 删除成功"
+                        echo -e "${SUCCESS} (1.7.4) 标签 ${tag_name} 删除成功"
                     else
-                        echo -e "${ERROR} (1.7.6) 删除标签 ${tag_name} 失败: HTTP ${tag_response}"
+                        echo -e "${ERROR} (1.7.5) 删除标签 ${tag_name} 失败: HTTP ${tag_response}"
                     fi
                 fi
             else
-                echo -e "${ERROR} (1.7.7) 删除发布 ${count}、${tag_name} (ID: ${release_id}) 失败: HTTP ${response}"
+                echo -e "${ERROR} (1.7.6) 删除发布 ${count}、${tag_name} (ID: ${release_id}) 失败: HTTP ${response}"
             fi
-        done < <(jq -c '.[]' "${all_releases_list}")
+        done < "${all_releases_list}"
         
-        echo -e "${SUCCESS} (1.7.8) 发布删除完成[ ${count}/${total} ]"
+        echo -e "${SUCCESS} (1.7.7) 发布删除完成[ ${count}/${total} ]"
     else
-        echo -e "${NOTE} (1.7.9) 没有需要删除的发布，跳过"
+        echo -e "${NOTE} (1.7.8) 没有需要删除的发布，跳过"
     fi
 }
 
@@ -416,25 +401,24 @@ get_workflows_list() {
 
     # 按日期排序（从旧到新）
     if [[ -s "${all_workflows_list}" ]]; then
-        # 将多行JSON对象转换为数组
-        jq -s 'sort_by(.date)' "${all_workflows_list}" > "${all_workflows_list}.tmp"
+        jq -s 'sort_by(.date)' "${all_workflows_list}" | jq -c '.[]' > "${all_workflows_list}.tmp"
         mv "${all_workflows_list}.tmp" "${all_workflows_list}"
         
         # 应用max_workflows_fetch限制
-        if [[ "$(jq 'length' "${all_workflows_list}")" -gt "${max_workflows_fetch}" ]]; then
+        if [[ "$(wc -l < "${all_workflows_list}")" -gt "${max_workflows_fetch}" ]]; then
             echo -e "${INFO} (2.3.1) 工作流数量超过max_workflows_fetch限制 [${max_workflows_fetch}]，将保留最旧的${max_workflows_fetch}条"
-            jq ".[0:${max_workflows_fetch}]" "${all_workflows_list}" > "${all_workflows_list}.tmp"
+            head -n "${max_workflows_fetch}" "${all_workflows_list}" > "${all_workflows_list}.tmp"
             mv "${all_workflows_list}.tmp" "${all_workflows_list}"
         fi
         
         # 打印结果日志
-        actual_count=$(jq 'length' "${all_workflows_list}")
+        actual_count=$(wc -l < "${all_workflows_list}")
         echo -e "${INFO} (2.3.2) 获取工作流信息请求成功"
         echo -e "${INFO} (2.3.3) 获取到的工作流总数: [ ${actual_count} ]"
         if [[ "${out_log}" == "true" ]]; then
             if [[ -s "${all_workflows_list}" ]]; then
                 echo -e "${DISPLAY} (2.3.4) 所有工作流运行列表:"
-                jq -c '.[]' "${all_workflows_list}"
+                cat "${all_workflows_list}" | jq -c .
                 echo -e ""
             else
                 echo -e "${NOTE} (2.3.5) 工作流列表为空"
@@ -456,9 +440,11 @@ filter_workflows() {
 
     # 确保文件是JSON数组格式
     if [[ -s "${all_workflows_list}" ]]; then
-        # 转换为数组格式
-        jq -s '.' "${all_workflows_list}" > "${all_workflows_list}.tmp"
-        mv "${all_workflows_list}.tmp" "${all_workflows_list}"
+        # 如果文件不是数组格式，转换为数组
+        if ! jq -e '. | type == "array"' "${all_workflows_list}" &>/dev/null; then
+            jq -s '.' "${all_workflows_list}" > "${all_workflows_list}.tmp"
+            mv "${all_workflows_list}.tmp" "${all_workflows_list}"
+        fi
     else
         echo -e "${NOTE} (2.4.0) 工作流列表为空，跳过过滤"
         return
@@ -536,11 +522,9 @@ filter_workflows() {
 
     # 更新最终列表
     if [[ -s "${final_workflows_list}" ]]; then
-        jq -s '.' "${final_workflows_list}" > "${final_workflows_list}.tmp"
-        mv "${final_workflows_list}.tmp" "${final_workflows_list}"
-        cp "${final_workflows_list}" "${all_workflows_list}"
+        mv "${final_workflows_list}" "${all_workflows_list}"
     else
-        echo '[]' > "${all_workflows_list}"
+        > "${all_workflows_list}"
     fi
 }
 
@@ -550,28 +534,15 @@ delete_workflows() {
     all_workflows_list="${TMP_DIR}/A_all_workflows_list.json"
     
     if [[ -s "${all_workflows_list}" ]]; then
-        # 确保文件是有效的JSON数组
-        if ! jq -e '.' "${all_workflows_list}" &>/dev/null; then
-            echo -e "${ERROR} (2.6.0) 工作流列表JSON格式无效"
-            return
-        fi
-
         local count=0
         local total=$(jq 'length' "${all_workflows_list}")
         
-        # 使用jq迭代数组元素
-        while IFS= read -r workflow; do
+        while read -r workflow; do
             count=$((count + 1))
             local workflow_id=$(echo "${workflow}" | jq -r '.id')
             local workflow_name=$(echo "${workflow}" | jq -r '.name')
             
-            # 验证数据
-            if [[ -z "${workflow_id}" || "${workflow_id}" == "null" || -z "${workflow_name}" || "${workflow_name}" == "null" ]]; then
-                echo -e "${ERROR} (2.6.1) 无效的工作流数据: ${workflow}"
-                continue
-            fi
-            
-            echo -e "${INFO} (2.6.2) 正在删除工作流[ ${count}/${total} ]: ${workflow_name} (ID: ${workflow_id})"
+            echo -e "${INFO} (2.6.1) 正在删除工作流[ ${count}/${total} ]"
             
             response=$(curl -s -o /dev/null -w "%{http_code}" \
                 -X DELETE \
@@ -582,15 +553,15 @@ delete_workflows() {
             )
                 
             if [[ "$response" -eq 204 ]]; then
-                echo -e "${SUCCESS} (2.6.3) 删除工作流 ${count}、${workflow_name} (ID: ${workflow_id}) 成功"
+                echo -e "${SUCCESS} (2.6.2) 删除工作流 ${count}、${workflow_name} (ID: ${workflow_id}) 成功"
             else
-                echo -e "${ERROR} (2.6.4) 删除工作流 ${count}、${workflow_name} (ID: ${workflow_id}) 失败: HTTP ${response}"
+                echo -e "${ERROR} (2.6.3) 删除工作流 ${count}、${workflow_name} (ID: ${workflow_id}) 失败: HTTP ${response}"
             fi
         done < <(jq -c '.[]' "${all_workflows_list}")
         
-        echo -e "${SUCCESS} (2.6.5) 工作流删除完成[ ${count}/${total} ]"
+        echo -e "${SUCCESS} (2.6.4) 工作流删除完成[ ${count}/${total} ]"
     else
-        echo -e "${NOTE} (2.6.6) 没有需要删除的工作流"
+        echo -e "${NOTE} (2.6.5) 没有需要删除的工作流"
     fi
 }
 
