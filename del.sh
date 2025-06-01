@@ -225,8 +225,31 @@ filter_releases() {
         fi
     fi
 
+    # 0. 首先处理预发布选项过滤
+    if [[ -s "${all_releases_list}" ]]; then
+        if [[ "${prerelease_option}" == "all" ]]; then
+            echo -e "${NOTE} (1.4.1) 不过滤预发布选项，跳过"
+            cp "${all_releases_list}" "${filtered_releases_list}"
+        elif [[ "${prerelease_option}" == "false" ]]; then
+            echo -e "${INFO} (1.4.2) 过滤预发布选项: [ false ]"
+            jq -c '[.[] | select(.prerelease == false)]' "${all_releases_list}" > "${filtered_releases_list}"
+        elif [[ "${prerelease_option}" == "true" ]]; then
+            echo -e "${INFO} (1.4.3) 过滤预发布选项: [ true ]"
+            jq -c '[.[] | select(.prerelease == true)]' "${all_releases_list}" > "${filtered_releases_list}"
+        fi
+        
+        # 日志输出
+        if [[ "${out_log}" == "true" ]]; then
+            echo -e "${DISPLAY} (1.4.4) 当前发布列表:"
+            jq -c '.[]' "${filtered_releases_list}"
+        fi
+    else
+        echo -e "${NOTE} (1.4.5) 发布列表为空，跳过预发布过滤"
+        > "${filtered_releases_list}"
+    fi
+
     # 1. 处理关键词过滤（仅在有关键词时执行）
-    if [[ "${#releases_keep_keyword[@]}" -ge "1" && -s "${all_releases_list}" ]]; then
+    if [[ "${#releases_keep_keyword[@]}" -ge "1" && -s "${filtered_releases_list}" ]]; then
         echo -e "${INFO} (1.5.1) 过滤标签关键词: [ $(echo ${releases_keep_keyword[@]} | xargs) ]"
         
         # 构建关键词过滤条件
@@ -237,7 +260,8 @@ filter_releases() {
         filter_condition="${filter_condition# and }"  # 移除开头的" and "
 
         # 应用过滤
-        jq -c "[.[] | select(${filter_condition})]" "${all_releases_list}" > "${filtered_releases_list}"
+        jq -c "[.[] | select(${filter_condition})]" "${filtered_releases_list}" > "${filtered_releases_list}.tmp"
+        mv "${filtered_releases_list}.tmp" "${filtered_releases_list}"
         
         # 记录保留的发布（仅日志）
         if [[ "${out_log}" == "true" ]]; then
@@ -247,8 +271,7 @@ filter_releases() {
             jq -c '.[]' "${kept_releases_list}"
         fi
     else
-        echo -e "${NOTE} (1.5.3) 无关键词过滤，使用原始列表"
-        cp "${all_releases_list}" "${filtered_releases_list}"
+        echo -e "${NOTE} (1.5.3) 无关键词过滤，跳过"
     fi
 
     # 2. 处理保留最新N条
