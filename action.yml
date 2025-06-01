@@ -131,7 +131,7 @@ runs:
         [[ -z "${gh_token}" ]] && error_msg "必须设置 [ gh_token ] 参数，且参数为正确密钥"
         [[ -z "${delete_releases}" ]] && error_msg "必须设置 [ delete_releases ] 参数，且参数为 'true' 或 'false'"
         [[ -z "${delete_workflows}" ]] && error_msg "必须设置 [ delete_workflows ] 参数，且参数为 'true' 或 'false'"
-        [[ -z "${repo}" ]] && repo="${GITHUB_REPOSITORY}"
+        [[ -z "${repo}" ]] && repo="${{ inputs.repo }}"
         [[ ! -f "del.sh" ]] && error_msg "未知原因，找不到 [ del.sh ] 执行文件"
 
         # 验证 GitHub Token 是否有效
