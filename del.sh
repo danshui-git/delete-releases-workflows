@@ -130,8 +130,7 @@ init_var() {
         esac
     done
     
-    echo -e ""
-    echo -e "${INFO} repo: [ ${repo} ]"
+    echo -e "\n${INFO} repo: [ ${repo} ]"
     echo -e "${INFO} delete_releases: [ ${delete_releases} ]"
     echo -e "${INFO} delete_tags: [ ${delete_tags} ]"
     echo -e "${INFO} prerelease_option: [ ${prerelease_option} ]"
@@ -142,8 +141,7 @@ init_var() {
     echo -e "${INFO} workflows_keep_latest: [ ${workflows_keep_latest} ]"
     echo -e "${INFO} workflows_keep_keyword: [ $(echo ${workflows_keep_keyword[@]} | xargs) ]"
     echo -e "${INFO} max_workflows_fetch: [ ${max_workflows_fetch} ]"
-    echo -e "${INFO} out_log: [ ${out_log} ]"
-    echo -e ""
+    echo -e "${INFO} out_log: [ ${out_log} ]\n"
 }
 
 get_total_pages() {
