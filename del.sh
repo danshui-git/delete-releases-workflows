@@ -295,11 +295,14 @@ filter_releases() {
         echo -e "${NOTE} (1.6.6) 无发布需要处理"
     fi
 
-    # 更新最终列表
+    # 更新最终列表 - 修复部分
     if [[ -s "${final_releases_list}" ]]; then
-        mv "${final_releases_list}" "${all_releases_list}"
+        # 确保我们处理的是对象数组
+        jq -s '.' "${final_releases_list}" > "${final_releases_list}.tmp"
+        mv "${final_releases_list}.tmp" "${final_releases_list}"
+        cp "${final_releases_list}" "${all_releases_list}"
     else
-        > "${all_releases_list}"
+        echo '[]' > "${all_releases_list}"
     fi
 }
 
@@ -309,15 +312,22 @@ delete_releases() {
     all_releases_list="${TMP_DIR}/A_all_releases_list.json"
     
     if [[ -s "${all_releases_list}" ]]; then
-        total=$(wc -l < "${all_releases_list}")
+        total=$(jq 'length' "${all_releases_list}")
         count=0
         
+        # 修复：使用jq正确解析数组中的每个对象
         while read -r release; do
             count=$((count + 1))
             release_id=$(echo "${release}" | jq -r '.id')
             tag_name=$(echo "${release}" | jq -r '.tag_name')
             
-            echo -e "${INFO} (1.7.1) 正在删除发布[ ${count}/${total} ]"
+            # 添加验证
+            if [[ -z "${release_id}" || -z "${tag_name}" ]]; then
+                echo -e "${ERROR} (1.7.0) 无效的发布数据: ${release}"
+                continue
+            fi
+            
+            echo -e "${INFO} (1.7.1) 正在删除发布[ ${count}/${total} ]: ${tag_name} (ID: ${release_id})"
             
             # 删除发布
             response=$(curl -s -o /dev/null -w "%{http_code}" \
@@ -352,7 +362,7 @@ delete_releases() {
             else
                 echo -e "${ERROR} (1.7.6) 删除发布 ${count}、${tag_name} (ID: ${release_id}) 失败: HTTP ${response}"
             fi
-        done < "${all_releases_list}"
+        done < <(jq -c '.[]' "${all_releases_list}")
         
         echo -e "${SUCCESS} (1.7.7) 发布删除完成[ ${count}/${total} ]"
     else
@@ -522,9 +532,11 @@ filter_workflows() {
 
     # 更新最终列表
     if [[ -s "${final_workflows_list}" ]]; then
-        mv "${final_workflows_list}" "${all_workflows_list}"
+        jq -s '.' "${final_workflows_list}" > "${final_workflows_list}.tmp"
+        mv "${final_workflows_list}.tmp" "${final_workflows_list}"
+        cp "${final_workflows_list}" "${all_workflows_list}"
     else
-        > "${all_workflows_list}"
+        echo '[]' > "${all_workflows_list}"
     fi
 }
 
@@ -542,7 +554,13 @@ delete_workflows() {
             local workflow_id=$(echo "${workflow}" | jq -r '.id')
             local workflow_name=$(echo "${workflow}" | jq -r '.name')
             
-            echo -e "${INFO} (2.6.1) 正在删除工作流[ ${count}/${total} ]"
+            # 添加验证
+            if [[ -z "${workflow_id}" || -z "${workflow_name}" ]]; then
+                echo -e "${ERROR} (2.6.0) 无效的工作流数据: ${workflow}"
+                continue
+            fi
+            
+            echo -e "${INFO} (2.6.1) 正在删除工作流[ ${count}/${total} ]: ${workflow_name} (ID: ${workflow_id})"
             
             response=$(curl -s -o /dev/null -w "%{http_code}" \
                 -X DELETE \
