@@ -413,11 +413,11 @@ delete_releases() {
         echo -e "${NOTE} (1.7.8) 没有需要删除的发布，跳过"
     fi
 
-    echo -e "${SUCCESS} 删除发布程序运行完毕\n"
+    echo -e "${SUCCESS} 删除发布程序运行完毕"
 }
 
 get_workflows_list() {
-    echo -e "${STEPS} 开始查询工作流列表..."
+    echo -e "\n${STEPS} 开始查询工作流列表..."
 
     # 创建临时文件存储结果
     all_workflows_list="${TMP_DIR}/A_all_workflows_list.json"
