@@ -199,8 +199,8 @@ runs:
 
         # 验证必需参数
         [[ -z "$gh_token" ]] && error_msg "必须提供有效的 GitHub token"
-        [[ -z "$delete_releases" ]] && error_msg "必须设置 delete_releases 参数"
-        [[ -z "$delete_workflows" ]] && error_msg "必须设置 delete_workflows 参数"
+        [[ -z "$delete_releases" ]] && error_msg "必须设置 delete_releases 参数，且参数必须是 'true' 或 'false'"
+        [[ -z "$delete_workflows" ]] && error_msg "必须设置 delete_workflows 参数，且参数必须是 'true' 或 'false'"
 
         # 验证仓库格式
         if ! validate_repo_format "$repo"; then
