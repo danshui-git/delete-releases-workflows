@@ -12,13 +12,15 @@ fi
 # 设置默认值
 github_per_page="100"  # 每次请求获取的数量
 github_max_page="10"   # 最大请求页数限制
+api_delay=1           # API请求之间的延迟(秒)
+max_retries=3         # 最大重试次数
 
 # 设置字体颜色
 STEPS="[\033[95m 执行 \033[0m]"
 INFO="[\033[94m 信息 \033[0m]"
 NOTE="[\033[93m 注意 \033[0m]"
-ERROR="[\033[91m 错误 \033[0m]"
-DISPLAY="[\033[31m 日志 \033[0m]"
+ERROR="[\033[31m 错误 \033[0m]"
+DISPLAY="[\033[91m 日志 \033[0m]"
 SUCCESS="[\033[92m 成功 \033[0m]"
 
 # 临时文件目录
@@ -27,6 +29,15 @@ chmod 755 "${TMP_DIR}"
 trap 'rm -rf "${TMP_DIR}"' EXIT
 
 #==============================================================================================
+
+# 转义jq字符串中的特殊字符
+escape_jq_string() {
+    local str="$1"
+    # 转义反斜杠和双引号
+    str="${str//\\/\\\\}"
+    str="${str//\"/\\\"}"
+    echo "$str"
+}
 
 cleanup() {
     rm -rf "${TMP_DIR}"
@@ -38,31 +49,62 @@ error_msg() {
     exit 1
 }
 
-# 验证布尔值
-validate_boolean() {
-    local var="$1" param_name="$2"
-    if [[ ! "$var" =~ ^(true|false)$ ]]; then
-        error_msg "参数 $param_name 的值: $var 无效，必须是 'true' 或 'false'"
-    fi
-}
-
-# 验证预发布选项
-validate_prerelease() {
-    local var="$1" param_name="$2"
-    if [[ ! "$var" =~ ^(true|false|all)$ ]]; then
-        error_msg "参数 $param_name 的值: $var 无效，必须是 'true', 'false', 或 'all'."
-    fi
-}
-
-# 验证正整数（1-1000）
-validate_positive_integer() {
-    local var="$1" param_name="$2" max="$3"
-    if ! [[ "$var" =~ ^[0-9][0-9]*$ ]]; then
-        error_msg "参数 $param_name 的值: $var 无效，必须是正整数"
-    fi
-    if [[ "$var" -gt "$max" ]]; then
-        error_msg "参数 $param_name 的值: $var 无效，最大值是 $max"
-    fi
+# 安全的API请求函数
+github_api_request() {
+    local url="$1"
+    local method="${2:-GET}"
+    local retry_count=0
+    local response
+    local http_code
+    
+    while [[ "$retry_count" -lt "$max_retries" ]]; do
+        # 添加请求延迟
+        if [[ "$retry_count" -gt 0 ]]; then
+            sleep "$api_delay"
+        fi
+        
+        response=$(curl -s -w "\n%{http_code}" -L -f \
+            -X "$method" \
+            -H "Authorization: Bearer ${gh_token}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$url")
+        
+        http_code=$(echo "$response" | tail -n1)
+        response=$(echo "$response" | sed '$d')
+        
+        # 检查速率限制
+        if [[ "$http_code" -eq 403 ]]; then
+            local reset_time=$(curl -s -I \
+                -H "Authorization: Bearer ${gh_token}" \
+                "https://api.github.com" | grep -i "x-ratelimit-reset" | tr -d '\r' | awk '{print $2}')
+            
+            if [[ -n "$reset_time" ]]; then
+                local current_time=$(date +%s)
+                local wait_time=$((reset_time - current_time + 1))
+                
+                if [[ "$wait_time" -gt 0 ]]; then
+                    echo -e "${NOTE} 达到API速率限制，等待 ${wait_time}秒后重试..."
+                    sleep "$wait_time"
+                    continue
+                fi
+            fi
+        fi
+        
+        # 成功响应
+        if [[ "$http_code" =~ ^2[0-9]{2}$ ]]; then
+            echo "$response"
+            return 0
+        fi
+        
+        # 其他错误
+        retry_count=$((retry_count + 1))
+        echo -e "${ERROR} API请求失败 (尝试 $retry_count/$max_retries): HTTP $http_code"
+        sleep "$api_delay"
+    done
+    
+    echo -e "${ERROR} 达到最大重试次数，API请求失败: $url"
+    return 1
 }
 
 init_var() {
@@ -87,21 +129,6 @@ init_var() {
             *) error_msg "无效选项 [ $1 ]!"; shift ;;
         esac
     done
-
-    # 参数验证
-    validate_boolean "$delete_releases" "delete_releases"
-    validate_boolean "$delete_tags" "delete_tags"
-    validate_boolean "$delete_workflows" "delete_workflows"
-    validate_boolean "$out_log" "out_log"
-
-    # 验证预发布选项
-    validate_prerelease "${prerelease_option}" "prerelease_option"
-
-    # 验证整数值参数
-    validate_positive_integer "$releases_keep_latest" "releases_keep_latest" 1000
-    validate_positive_integer "$workflows_keep_latest" "workflows_keep_latest" 1000
-    validate_positive_integer "$max_releases_fetch" "max_releases_fetch" 1000
-    validate_positive_integer "$max_workflows_fetch" "max_workflows_fetch" 1000
     
     echo -e ""
     echo -e "${INFO} repo: [ ${repo} ]"
@@ -156,13 +183,7 @@ get_releases_list() {
     for (( page=total_pages; page>=1; page-- )); do
         echo -e "${INFO} 正在获取第 ${page}/${total_pages} 页..."
         
-        response="$(
-            curl -s -L -f \
-                -H "Authorization: Bearer ${gh_token}" \
-                -H "Accept: application/vnd.github+json" \
-                -H "X-GitHub-Api-Version: 2022-11-28" \
-                "https://api.github.com/repos/${repo}/releases?per_page=${github_per_page}&page=${page}"
-        )" || {
+        response=$(github_api_request "https://api.github.com/repos/${repo}/releases?per_page=${github_per_page}&page=${page}") || {
             echo -e "${ERROR} 从GitHub API获取发布失败 (第 $page 页)"
             continue
         }
@@ -174,6 +195,11 @@ get_releases_list() {
         # 处理结果并追加到文件
         if [[ "$get_results_length" -gt 0 ]]; then
             echo "${response}" | jq -c '.[] | {date: .published_at, id: .id, prerelease: .prerelease, tag_name: .tag_name}' >> "${all_releases_list}"
+        fi
+        
+        # 添加请求间隔
+        if [[ "$page" -gt 1 ]]; then
+            sleep "$api_delay"
         fi
     done
 
@@ -255,18 +281,29 @@ filter_releases() {
         # 构建关键词过滤条件
         local filter_condition=""
         for keyword in "${releases_keep_keyword[@]}"; do
-            filter_condition+=" and (.tag_name | contains(\"${keyword}\") | not)"
+            # 跳过空关键词
+            [[ -z "${keyword}" ]] && continue
+            
+            # 转义关键词中的特殊字符
+            local escaped_keyword=$(escape_jq_string "${keyword}")
+            filter_condition+=" and (.tag_name | contains(\"${escaped_keyword}\") | not)"
         done
-        filter_condition="${filter_condition# and }"  # 移除开头的" and "
 
-        # 应用过滤
-        jq -c "[.[] | select(${filter_condition})]" "${filtered_releases_list}" > "${filtered_releases_list}.tmp"
-        mv "${filtered_releases_list}.tmp" "${filtered_releases_list}"
+        # 如果所有关键词都为空，则跳过过滤
+        if [[ -n "${filter_condition}" ]]; then
+            filter_condition="${filter_condition# and }"  # 移除开头的" and "
+            jq -c "[.[] | select(${filter_condition})]" "${filtered_releases_list}" > "${filtered_releases_list}.tmp"
+            mv "${filtered_releases_list}.tmp" "${filtered_releases_list}"
+        fi
         
         # 记录保留的发布（仅日志）
         if [[ "${out_log}" == "true" ]]; then
             kept_releases_list="${TMP_DIR}/kept_releases.json"
-            jq -c "[.[] | select(${filter_condition} | not)]" "${all_releases_list}" > "${kept_releases_list}"
+            if [[ -n "${filter_condition}" ]]; then
+                jq -c "[.[] | select(${filter_condition} | not)]" "${all_releases_list}" > "${kept_releases_list}"
+            else
+                cp "${all_releases_list}" "${kept_releases_list}"
+            fi
             echo -e "${DISPLAY} (1.5.2) 符合条件标签列表:"
             jq -c '.[]' "${kept_releases_list}"
         fi
@@ -349,38 +386,28 @@ delete_releases() {
             echo -e "${INFO} (1.7.1) 正在删除发布[ ${count}/${total} ]"
             
             # 删除发布
-            response=$(curl -s -o /dev/null -w "%{http_code}" \
-                -X DELETE \
-                -H "Authorization: Bearer ${gh_token}" \
-                -H "Accept: application/vnd.github+json" \
-                -H "X-GitHub-Api-Version: 2022-11-28" \
-                "https://api.github.com/repos/${repo}/releases/${release_id}"
-            )
+            response=$(github_api_request "https://api.github.com/repos/${repo}/releases/${release_id}" "DELETE") || {
+                echo -e "${ERROR} (1.7.2) 删除发布 ${count}、${tag_name} (ID: ${release_id}) 失败"
+                continue
+            }
                 
-            if [[ "$response" -eq 204 ]]; then
-                echo -e "${SUCCESS} (1.7.2) 删除发布 ${count}、${tag_name} (ID: ${release_id}) 成功"
+            echo -e "${SUCCESS} (1.7.3) 删除发布 ${count}、${tag_name} (ID: ${release_id}) 成功"
+            
+            # 如果启用，删除关联的标签
+            if [[ "${delete_tags}" == "true" ]]; then
+                echo -e "${INFO} (1.7.4) 正在删除关联标签: ${tag_name}"
                 
-                # 如果启用，删除关联的标签
-                if [[ "${delete_tags}" == "true" ]]; then
-                    echo -e "${INFO} (1.7.3) 正在删除关联标签: ${tag_name}"
-                    
-                    tag_response=$(curl -s -o /dev/null -w "%{http_code}" \
-                        -X DELETE \
-                        -H "Authorization: Bearer ${gh_token}" \
-                        -H "Accept: application/vnd.github+json" \
-                        -H "X-GitHub-Api-Version: 2022-11-28" \
-                        "https://api.github.com/repos/${repo}/git/refs/tags/${tag_name}"
-                    )
-                    
-                    if [[ "$tag_response" -eq 204 ]]; then
-                        echo -e "${SUCCESS} (1.7.4) 标签 ${tag_name} 删除成功"
-                    else
-                        echo -e "${ERROR} (1.7.5) 删除标签 ${tag_name} 失败: HTTP ${tag_response}"
-                    fi
-                fi
-            else
-                echo -e "${ERROR} (1.7.6) 删除发布 ${count}、${tag_name} (ID: ${release_id}) 失败: HTTP ${response}"
+                tag_response=$(github_api_request "https://api.github.com/repos/${repo}/git/refs/tags/${tag_name}" "DELETE") || {
+                    echo -e "${ERROR} (1.7.5) 删除标签 ${tag_name} 失败"
+                    continue
+                }
+                
+                echo -e "${SUCCESS} (1.7.6) 标签 ${tag_name} 删除成功"
             fi
+            
+            # 添加删除间隔
+            sleep "$api_delay"
+            
         done < <(jq -c '.[]' "${all_releases_list}")
         
         echo -e "${SUCCESS} (1.7.7) 发布删除完成[ ${count}/${total} ]"
@@ -407,13 +434,7 @@ get_workflows_list() {
     for (( page=total_pages_needed; page>=1; page-- )); do
         echo -e "${INFO} 正在获取第 ${page}/${total_pages_needed} 页..."
         
-        response="$(
-            curl -s -L -f \
-                -H "Authorization: Bearer ${gh_token}" \
-                -H "Accept: application/vnd.github+json" \
-                -H "X-GitHub-Api-Version: 2022-11-28" \
-                "https://api.github.com/repos/${repo}/actions/runs?per_page=${github_per_page}&page=${page}"
-        )" || {
+        response=$(github_api_request "https://api.github.com/repos/${repo}/actions/runs?per_page=${github_per_page}&page=${page}") || {
             echo -e "${ERROR} 从GitHub API获取工作流失败 (第 $page 页)"
             continue
         }
@@ -425,6 +446,11 @@ get_workflows_list() {
         # 处理结果并追加到文件
         if [[ "$get_results_length" -gt 0 ]]; then
             echo "${response}" | jq -c '.workflow_runs[] | select(.status != "in_progress") | {date: .updated_at, id: .id, name: .name}' >> "${all_workflows_list}"
+        fi
+        
+        # 添加请求间隔
+        if [[ "$page" -gt 1 ]]; then
+            sleep "$api_delay"
         fi
     done
 
@@ -486,17 +512,30 @@ filter_workflows() {
         # 构建关键词过滤条件
         local filter_condition=""
         for keyword in "${workflows_keep_keyword[@]}"; do
-            filter_condition+=" and (.name | contains(\"${keyword}\") | not)"
+            # 跳过空关键词
+            [[ -z "${keyword}" ]] && continue
+            
+            # 转义关键词中的特殊字符
+            local escaped_keyword=$(escape_jq_string "${keyword}")
+            filter_condition+=" and (.name | contains(\"${escaped_keyword}\") | not)"
         done
-        filter_condition="${filter_condition# and }"  # 移除开头的" and "
 
-        # 应用过滤
-        jq -c "[.[] | select(${filter_condition})]" "${all_workflows_list}" > "${filtered_workflows_list}"
+        # 如果所有关键词都为空，则跳过过滤
+        if [[ -n "${filter_condition}" ]]; then
+            filter_condition="${filter_condition# and }"  # 移除开头的" and "
+            jq -c "[.[] | select(${filter_condition})]" "${all_workflows_list}" > "${filtered_workflows_list}"
+        else
+            cp "${all_workflows_list}" "${filtered_workflows_list}"
+        fi
         
         # 记录保留的工作流（仅日志）
         if [[ "${out_log}" == "true" ]]; then
             kept_workflows_list="${TMP_DIR}/kept_workflows.json"
-            jq -c "[.[] | select(${filter_condition} | not)]" "${all_workflows_list}" > "${kept_workflows_list}"
+            if [[ -n "${filter_condition}" ]]; then
+                jq -c "[.[] | select(${filter_condition} | not)]" "${all_workflows_list}" > "${kept_workflows_list}"
+            else
+                cp "${all_workflows_list}" "${kept_workflows_list}"
+            fi
             echo -e "${DISPLAY} (2.4.2) 符合条件工作流列表:"
             jq -c '.[]' "${kept_workflows_list}"
         fi
@@ -573,19 +612,16 @@ delete_workflows() {
             
             echo -e "${INFO} (2.6.1) 正在删除工作流[ ${count}/${total} ]"
             
-            response=$(curl -s -o /dev/null -w "%{http_code}" \
-                -X DELETE \
-                -H "Authorization: Bearer ${gh_token}" \
-                -H "Accept: application/vnd.github+json" \
-                -H "X-GitHub-Api-Version: 2022-11-28" \
-                "https://api.github.com/repos/${repo}/actions/runs/${workflow_id}"
-            )
+            response=$(github_api_request "https://api.github.com/repos/${repo}/actions/runs/${workflow_id}" "DELETE") || {
+                echo -e "${ERROR} (2.6.2) 删除工作流 ${count}、${workflow_name} (ID: ${workflow_id}) 失败"
+                continue
+            }
                 
-            if [[ "$response" -eq 204 ]]; then
-                echo -e "${SUCCESS} (2.6.2) 删除工作流 ${count}、${workflow_name} (ID: ${workflow_id}) 成功"
-            else
-                echo -e "${ERROR} (2.6.3) 删除工作流 ${count}、${workflow_name} (ID: ${workflow_id}) 失败: HTTP ${response}"
-            fi
+            echo -e "${SUCCESS} (2.6.3) 删除工作流 ${count}、${workflow_name} (ID: ${workflow_id}) 成功"
+            
+            # 添加删除间隔
+            sleep "$api_delay"
+            
         done < <(jq -c '.[]' "${all_workflows_list}")
         
         echo -e "${SUCCESS} (2.6.4) 工作流删除完成[ ${count}/${total} ]"
