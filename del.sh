@@ -309,8 +309,14 @@ delete_releases() {
     all_releases_list="${TMP_DIR}/A_all_releases_list.json"
     
     if [[ -s "${all_releases_list}" ]]; then
-        total=$(wc -l < "${all_releases_list}")
-        count=0
+        # 确保文件是JSON数组格式
+        if ! jq -e '. | type == "array"' "${all_releases_list}" &>/dev/null; then
+            jq -s '.' "${all_releases_list}" > "${all_releases_list}.tmp"
+            mv "${all_releases_list}.tmp" "${all_releases_list}"
+        fi
+
+        local count=0
+        local total=$(jq 'length' "${all_releases_list}")
         
         while read -r release; do
             count=$((count + 1))
@@ -352,7 +358,7 @@ delete_releases() {
             else
                 echo -e "${ERROR} (1.7.6) 删除发布 ${count}、${tag_name} (ID: ${release_id}) 失败: HTTP ${response}"
             fi
-        done < "${all_releases_list}"
+        done < <(jq -c '.[]' "${all_releases_list}")
         
         echo -e "${SUCCESS} (1.7.7) 发布删除完成[ ${count}/${total} ]"
     else
