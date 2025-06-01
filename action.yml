@@ -213,7 +213,7 @@ runs:
         validate_boolean "$delete_workflows" "delete_workflows"
         validate_boolean "$out_log" "out_log"
 
-        验证预发布选项
+        # 验证预发布选项
         validate_prerelease "$prerelease_option" "prerelease_option"
 
         # 关键词验证
