@@ -63,7 +63,7 @@ runs:
     - name: Ensure proper jq installation
       shell: bash
       run: |
-        # 设置颜色常量
+        # ......
         INFO="[\033[94m 信息 \033[0m]"
         ERROR="[\033[31m ERROR \033[0m]"
         
@@ -105,27 +105,29 @@ runs:
     - name: Validate inputs and run cleanup
       shell: bash
       run: |
-        # 设置颜色和常量
+        # ......
         ERROR="[\033[31m ERROR \033[0m]"
         INFO="[\033[94m 信息 \033[0m]"
         SUCCESS="[\033[92m SUCCESS \033[0m]"
-        
+
+        # 错误退出函数
         error_msg() {
           echo -e "${ERROR} $1"
           exit 1
         }
 
+        # 切换目录
         cd "${{ github.action_path }}" || {
           error_msg "无法切换到action目录: ${{ github.action_path }}"
         }
 
-        # 清理并获取输入参数
+        # 清理所有参数的空格或者换行符函数
         get_clean_input() {
           local var="$1"
           echo "$var" | tr -d '[:space:]' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
         }
 
-        # 验证布尔值
+        # 验证开关有效性函数
         validate_boolean() {
           local var="$1" param_name="$2"
           if [[ ! "$var" =~ ^(true|false)$ ]]; then
@@ -133,7 +135,7 @@ runs:
           fi
         }
 
-        # 验证预发布选项
+        # 验证预发布选项函数
         validate_prerelease() {
           local var="$1" param_name="$2"
           if [[ ! "$var" =~ ^(true|false|all)$ ]]; then
@@ -141,7 +143,7 @@ runs:
           fi
         }
 
-        # 验证关键词
+        # 验证关键词函数
         validate_keyword() {
           local var="$1" param_name="$2"
           if [[ "$var" =~ ^(true|false)$ ]]; then
@@ -149,7 +151,7 @@ runs:
           fi
         }
 
-        # 验证非负整数
+        # 验证数字非负和整数函数
         validate_non_negative_integer() {
           local var="$1" param_name="$2" max="${3:-1000}"
           if [[ -z "$var" ]]; then
@@ -211,18 +213,21 @@ runs:
         validate_boolean "$delete_tags" "delete_tags"
         validate_boolean "$delete_workflows" "delete_workflows"
         validate_boolean "$out_log" "out_log"
-        
+
+        验证预发布选项
         validate_prerelease "$prerelease_option" "prerelease_option"
 
+        # 关键词验证
         validate_keyword "$releases_keep_keyword" "releases_keep_keyword"
         validate_keyword "$workflows_keep_keyword" "workflows_keep_keyword"
-        
+
+        # 数字参数验证整数
         validate_non_negative_integer "$releases_keep_latest" "releases_keep_latest"
         validate_non_negative_integer "$workflows_keep_latest" "workflows_keep_latest"
         validate_non_negative_integer "$max_releases_fetch" "max_releases_fetch" 1000
         validate_non_negative_integer "$max_workflows_fetch" "max_workflows_fetch" 1000
 
-        # 验证 GitHub Token
+        # 验证gh_token有效性
         echo -e "${INFO} 正在验证 GitHub Token..."
         response=$(curl -s -o /dev/null -w "%{http_code}" \
           -H "Authorization: Bearer ${gh_token}" \
