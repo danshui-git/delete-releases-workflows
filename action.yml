@@ -74,26 +74,25 @@ runs:
 
         # 安装jq
         install_jq() {
-          echo -e "${INFO} Checking jq installation..."
+          if command -v jq &>/dev/null; then
+            echo -e "${INFO} 移除旧版jq..."
+            sudo snap remove jq 2>/dev/null || true
+            sudo apt-get remove -y jq 2>/dev/null || true
+          fi
+        
+          echo -e "${INFO} 安装jq..."
           if ! command -v jq &>/dev/null; then
             echo -e "${INFO} Installing jq..."
             sudo apt-get -qq update && sudo apt-get -qq install -y jq
           fi
           
           if ! command -v jq &>/dev/null; then
-            echo -e "${ERROR} jq installation failed"
+            echo -e "${ERROR} jq 安装失败"
             return 1
           fi
-          echo -e "${INFO} jq installed at $(which jq)"
+          echo -e "${INFO} jq 安装成功 $(which jq)"
           return 0
         }
-
-        # 移除旧版jq并安装新版
-        if command -v jq &>/dev/null; then
-          echo -e "${INFO} Removing existing jq..."
-          sudo snap remove jq 2>/dev/null || true
-          sudo apt-get remove -y jq 2>/dev/null || true
-        fi
 
         if ! install_jq; then
           exit 1
