@@ -414,6 +414,8 @@ delete_releases() {
     else
         echo -e "${NOTE} (1.7.8) 没有需要删除的发布，跳过"
     fi
+
+    echo -e "${SUCCESS} 删除发布程序运行完毕\n"
 }
 
 get_workflows_list() {
@@ -628,6 +630,8 @@ delete_workflows() {
     else
         echo -e "${NOTE} (2.6.5) 没有需要删除的工作流"
     fi
+    
+    echo -e "${SUCCESS} 删除工作流程序运行完毕"
 }
 
 # 主程序
