@@ -234,7 +234,7 @@ runs:
 
         # 构建命令参数
         cmd_args=()
-        [[ -n "$repo" ]] && cmd_args+=(-r "$repo")
+        cmd_args+=(-r "$repo")
         cmd_args+=(-a "$delete_releases")
         cmd_args+=(-t "$delete_tags")
         cmd_args+=(-p "$prerelease_option")
