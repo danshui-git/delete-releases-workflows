@@ -120,16 +120,30 @@ runs:
 
         # 错误提示字体颜色
         ERROR="[\033[91m ERROR \033[0m]"
+        SUCCESS="[\033[92m SUCCESS \033[0m]"
+        INFO="[\033[94m INFO \033[0m]"
         error_msg() {
             echo -e "${ERROR} ${1}"
             exit 1
         }
 
-        # 验证必需参数,如果参数为空则会停止脚本运行
+        # 验证必需参数
         [[ -z "${gh_token}" ]] && error_msg "必须设置 [ gh_token ] 参数，且参数为正确密钥"
         [[ -z "${delete_releases}" ]] && error_msg "必须设置 [ delete_releases ] 参数，且参数为 'true' 或 'false'"
         [[ -z "${delete_workflows}" ]] && error_msg "必须设置 [ delete_workflows ] 参数，且参数为 'true' 或 'false'"
         [[ ! -f "del.sh" ]] && error_msg "未知原因，找不到 [ del.sh ] 执行文件"
+
+        # 验证 GitHub Token 是否有效
+        echo -e "${INFO} 正在验证 GitHub Token 有效性..."
+        response=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer ${gh_token}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/user")
+
+        if [[ "$response" -ne 200 ]]; then
+            error_msg "GitHub Token 验证失败 (HTTP $response)，请检查 Token 是否正确且有足够权限"
+        fi
 
         # 构建命令行参数
         make_command=""
@@ -150,7 +164,3 @@ runs:
         # 执行脚本
         chmod +x del.sh
         ./del.sh ${make_command}
-
-branding:
-  icon: "terminal"
-  color: "gray-dark"
