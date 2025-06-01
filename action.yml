@@ -1,6 +1,7 @@
 name: "delete-releases-workflows"
 author: "ophub"
 description: "Delete older releases and workflow runs"
+
 inputs:
   repo:
     description: "Repo name in the form of <owner>/<repo>"
@@ -9,7 +10,6 @@ inputs:
   delete_releases:
     description: "Whether to delete releases records"
     required: true
-    default: ""
   delete_tags:
     description: "Whether to delete associated tags"
     required: false
@@ -33,7 +33,6 @@ inputs:
   delete_workflows:
     description: "Whether to delete workflows records"
     required: true
-    default: ""
   workflows_keep_latest:
     description: "How many latest workflow runs to keep"
     required: false
@@ -42,18 +41,17 @@ inputs:
     description: "Keywords for keep workflows"
     required: false
     default: ""
+  max_workflows_fetch:
+    description: "Maximum number of workflow runs to fetch in total"
+    required: false
+    default: "200"
   out_log:
     description: "Output a list log for each step"
     required: false
     default: "false"
   gh_token:
-    description: "Set the token"
+    description: "GitHub token with appropriate permissions"
     required: true
-    default: ""
-  max_workflows_fetch:
-    description: "Maximum number of workflow runs to fetch in total"
-    required: false
-    default: "200"
   debug:
     description: "Enable debug output"
     required: false
@@ -65,103 +63,184 @@ runs:
     - name: Ensure proper jq installation
       shell: bash
       run: |
-        # Receive input parameters related to releases
+        # 设置颜色常量
         INFO="[\033[94m 信息 \033[0m]"
-        ERROR="[\033[91m ERROR \033[0m]"
-        error_msg() {
-            echo -e "${ERROR} ${1}"
-            exit 1
-        }
+        ERROR="[\033[31m ERROR \033[0m]"
         
         # 根据DEBUG变量决定是否静默
         if [ "$DEBUG" != "true" ]; then
           exec >/dev/null 2>&1
         fi
 
-        if command -v jq &> /dev/null; then
-          echo -e "${INFO} 正在御载jq..."
-          sudo snap remove jq || true
-          sudo apt-get remove -y jq || true
-        fi
-
-        echo -e "${INFO} 开始安装jq..."
-        sudo apt-get -qq update
-        sudo apt-get -qq install -y jq
-
-        if ! command -v jq &> /dev/null; then
-          error_msg "jq 安装失败，退出脚本"
-        fi
-        echo -e "${INFO} jq 安装完毕 $(which jq)"
-      env:
-        DEBIAN_FRONTEND: noninteractive
-        DEBUG: ${{ inputs.debug || 'false' }}
-
-    - name: Run cleanup script
-      shell: bash
-      run: |
-        GITHUB_ACTION_PATH="${{ github.action_path }}"
-        cd "$GITHUB_ACTION_PATH"
-        export PATH="/usr/bin:$PATH"
-
-        # 所有应用参数，同时删除空白字符(包括空格、制表符和换行符)
-        delete_releases=$(echo "${{ inputs.delete_releases }}" | tr -d '[:space:]')
-        delete_tags=$(echo "${{ inputs.delete_tags }}" | tr -d '[:space:]')
-        prerelease_option=$(echo "${{ inputs.prerelease_option }}" | tr -d '[:space:]')
-        releases_keep_latest=$(echo "${{ inputs.releases_keep_latest }}" | tr -d '[:space:]')
-        releases_keep_keyword=$(echo "${{ inputs.releases_keep_keyword }}" | tr -d '[:space:]')
-        max_releases_fetch=$(echo "${{ inputs.max_releases_fetch }}" | tr -d '[:space:]')
-        delete_workflows=$(echo "${{ inputs.delete_workflows }}" | tr -d '[:space:]')
-        workflows_keep_latest=$(echo "${{ inputs.workflows_keep_latest }}" | tr -d '[:space:]')
-        workflows_keep_keyword=$(echo "${{ inputs.workflows_keep_keyword }}" | tr -d '[:space:]')
-        max_workflows_fetch=$(echo "${{ inputs.max_workflows_fetch }}" | tr -d '[:space:]')
-        out_log=$(echo "${{ inputs.out_log }}" | tr -d '[:space:]')
-        repo=$(echo "${{ inputs.repo }}" | tr -d '[:space:]}')
-        gh_token="${{ inputs.gh_token }}"
-
-        # 错误提示字体颜色
-        ERROR="[\033[91m ERROR \033[0m]"
-        SUCCESS="[\033[92m SUCCESS \033[0m]"
-        INFO="[\033[94m INFO \033[0m]"
-        error_msg() {
-            echo -e "${ERROR} ${1}"
-            exit 1
+        # 安装jq
+        install_jq() {
+          echo -e "${INFO} Checking jq installation..."
+          if ! command -v jq &>/dev/null; then
+            echo -e "${INFO} Installing jq..."
+            sudo apt-get -qq update && sudo apt-get -qq install -y jq
+          fi
+          
+          if ! command -v jq &>/dev/null; then
+            echo -e "${ERROR} jq installation failed"
+            return 1
+          fi
+          echo -e "${INFO} jq installed at $(which jq)"
+          return 0
         }
 
-        # 验证必需参数
-        [[ -z "${gh_token}" ]] && error_msg "必须设置 [ gh_token ] 参数，且参数为正确密钥"
-        [[ -z "${delete_releases}" ]] && error_msg "必须设置 [ delete_releases ] 参数，且参数为 'true' 或 'false'"
-        [[ -z "${delete_workflows}" ]] && error_msg "必须设置 [ delete_workflows ] 参数，且参数为 'true' 或 'false'"
-        [[ -z "${repo}" ]] && repo="${{ inputs.repo }}"
-        [[ ! -f "del.sh" ]] && error_msg "未知原因，找不到 [ del.sh ] 执行文件"
-
-        # 验证 GitHub Token 是否有效
-        echo -e "${INFO} 正在验证 GitHub Token 有效性..."
-        response=$(curl -s -o /dev/null -w "%{http_code}" \
-            -H "Authorization: Bearer ${gh_token}" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/user")
-
-        if [[ "$response" -ne 200 ]]; then
-            error_msg "GitHub Token 验证失败 (HTTP $response)，请检查 Token 是否正确且有足够权限"
+        # 移除旧版jq并安装新版
+        if command -v jq &>/dev/null; then
+          echo -e "${INFO} Removing existing jq..."
+          sudo snap remove jq 2>/dev/null || true
+          sudo apt-get remove -y jq 2>/dev/null || true
         fi
 
-        # 构建命令行参数
-        make_command=""
-        [[ -n "${repo}" ]] && make_command="${make_command} -r ${repo}"
-        [[ -n "${delete_releases}" ]] && make_command="${make_command} -a ${delete_releases}"
-        [[ -n "${delete_tags}" ]] && make_command="${make_command} -t ${delete_tags}"
-        [[ -n "${prerelease_option}" ]] && make_command="${make_command} -p ${prerelease_option}"
-        [[ -n "${releases_keep_latest}" ]] && make_command="${make_command} -l ${releases_keep_latest}"
-        [[ -n "${releases_keep_keyword}" ]] && make_command="${make_command} -w ${releases_keep_keyword}"
-        [[ -n "${max_releases_fetch}" ]] && make_command="${make_command} -c ${max_releases_fetch}"
-        [[ -n "${delete_workflows}" ]] && make_command="${make_command} -s ${delete_workflows}"
-        [[ -n "${workflows_keep_latest}" ]] && make_command="${make_command} -d ${workflows_keep_latest}"
-        [[ -n "${workflows_keep_keyword}" ]] && make_command="${make_command} -k ${workflows_keep_keyword}"
-        [[ -n "${max_workflows_fetch}" ]] && make_command="${make_command} -h ${max_workflows_fetch}"
-        [[ -n "${gh_token}" ]] && make_command="${make_command} -g ${gh_token}"
-        [[ -n "${out_log}" ]] && make_command="${make_command} -o ${out_log}"
+        if ! install_jq; then
+          exit 1
+        fi
+      env:
+        DEBIAN_FRONTEND: noninteractive
+        DEBUG: ${{ inputs.debug }}
 
-        # 执行脚本
+    - name: Validate inputs and run cleanup
+      shell: bash
+      run: |
+        # 设置颜色和常量
+        ERROR="[\033[31m ERROR \033[0m]"
+        INFO="[\033[94m 信息 \033[0m]"
+        SUCCESS="[\033[92m SUCCESS \033[0m]"
+        
+        error_msg() {
+          echo -e "${ERROR} $1"
+          exit 1
+        }
+
+        cd "${{ github.action_path }}" || {
+          error_msg "无法切换到action目录: ${{ github.action_path }}"
+        }
+
+        # 清理并获取输入参数
+        get_clean_input() {
+          local var="$1"
+          echo "$var" | tr -d '[:space:]' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+        }
+
+        # 验证布尔值
+        validate_boolean() {
+          local var="$1" param_name="$2"
+          if [[ ! "$var" =~ ^(true|false)$ ]]; then
+            error_msg "参数 $param_name 的值: '$var' 无效，必须是 'true' 或 'false'"
+          fi
+        }
+
+        # 验证预发布选项
+        validate_prerelease() {
+          local var="$1" param_name="$2"
+          if [[ ! "$var" =~ ^(true|false|all)$ ]]; then
+            error_msg "参数 $param_name 的值: '$var' 无效，必须是 'true', 'false' 或 'all'"
+          fi
+        }
+
+        # 验证非负整数
+        validate_non_negative_integer() {
+          local var="$1" param_name="$2" max="${3:-1000}"
+          if [[ -z "$var" ]]; then
+            error_msg "参数 $param_name 不能为空"
+          fi
+          if ! [[ "$var" =~ ^[0-9]+$ ]]; then
+            error_msg "参数 $param_name 的值: '$var' 无效，必须是非负和整数"
+          fi
+          if [[ $var -gt $max ]]; then
+            error_msg "参数 $param_name 的值: '$var' 无效，最大值是 $max"
+          fi
+        }
+
+        # 验证github仓库格式正确性
+        validate_repo_format() {
+          local repo="$1"
+          local user_pattern='^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$'
+          local repo_pattern='^[a-zA-Z0-9_]([a-zA-Z0-9_.-]*[a-zA-Z0-9_])?$'
+          IFS='/' read -r username reponame <<< "$repo"
+          if [[ ${#username} -ge 1 && ${#username} -le 39 && 
+                ${#reponame} -ge 1 && ${#reponame} -le 100 && 
+                ! "$reponame" =~ \.git$ &&
+                "$username" =~ $user_pattern && 
+                "$reponame" =~ $repo_pattern ]]; then
+            return 0  # 格式正确
+          else
+            echo -e "${ERROR} 仓库格式错误: $repo"
+            return 1  # 格式错误
+          fi
+        }
+
+        # 获取并清理输入参数
+        repo=$(get_clean_input "${{ inputs.repo }}")
+        delete_releases=$(get_clean_input "${{ inputs.delete_releases }}")
+        delete_tags=$(get_clean_input "${{ inputs.delete_tags }}")
+        prerelease_option=$(get_clean_input "${{ inputs.prerelease_option }}")
+        releases_keep_latest=$(get_clean_input "${{ inputs.releases_keep_latest }}")
+        releases_keep_keyword=$(get_clean_input "${{ inputs.releases_keep_keyword }}")
+        max_releases_fetch=$(get_clean_input "${{ inputs.max_releases_fetch }}")
+        delete_workflows=$(get_clean_input "${{ inputs.delete_workflows }}")
+        workflows_keep_latest=$(get_clean_input "${{ inputs.workflows_keep_latest }}")
+        workflows_keep_keyword=$(get_clean_input "${{ inputs.workflows_keep_keyword }}")
+        max_workflows_fetch=$(get_clean_input "${{ inputs.max_workflows_fetch }}")
+        out_log=$(get_clean_input "${{ inputs.out_log }}")
+        gh_token="${{ inputs.gh_token }}"
+
+        # 验证必需参数
+        [[ -z "$gh_token" ]] && error_msg "必须提供有效的 GitHub token"
+        [[ -z "$delete_releases" ]] && error_msg "必须设置 delete_releases 参数"
+        [[ -z "$delete_workflows" ]] && error_msg "必须设置 delete_workflows 参数"
+
+        # 验证仓库格式
+        if ! validate_repo_format "$repo"; then
+          error_msg "提供的仓库名格式不正确"
+        fi
+
+        # 验证参数格式
+        validate_boolean "$delete_releases" "delete_releases"
+        validate_boolean "$delete_tags" "delete_tags"
+        validate_boolean "$delete_workflows" "delete_workflows"
+        validate_boolean "$out_log" "out_log"
+        
+        validate_prerelease "$prerelease_option" "prerelease_option"
+        
+        validate_non_negative_integer "$releases_keep_latest" "releases_keep_latest"
+        validate_non_negative_integer "$workflows_keep_latest" "workflows_keep_latest"
+        validate_non_negative_integer "$max_releases_fetch" "max_releases_fetch" 1000
+        validate_non_negative_integer "$max_workflows_fetch" "max_workflows_fetch" 1000
+
+        # 验证 GitHub Token
+        echo -e "${INFO} 正在验证 GitHub Token..."
+        response=$(curl -s -o /dev/null -w "%{http_code}" \
+          -H "Authorization: Bearer ${gh_token}" \
+          -H "Accept: application/vnd.github+json" \
+          -H "X-GitHub-Api-Version: 2022-11-28" \
+          "https://api.github.com/user")
+
+        [[ "$response" -ne 200 ]] && error_msg "GitHub Token 验证失败 (HTTP $response)，请检查 Token 是否正确且有足够权限"
+
+        # 构建命令参数
+        cmd_args=()
+        [[ -n "$repo" ]] && cmd_args+=(-r "$repo")
+        cmd_args+=(-a "$delete_releases")
+        cmd_args+=(-t "$delete_tags")
+        cmd_args+=(-p "$prerelease_option")
+        cmd_args+=(-l "$releases_keep_latest")
+        [[ -n "$releases_keep_keyword" ]] && cmd_args+=(-w "$releases_keep_keyword")
+        cmd_args+=(-c "$max_releases_fetch")
+        cmd_args+=(-s "$delete_workflows")
+        cmd_args+=(-d "$workflows_keep_latest")
+        [[ -n "$workflows_keep_keyword" ]] && cmd_args+=(-k "$workflows_keep_keyword")
+        cmd_args+=(-h "$max_workflows_fetch")
+        cmd_args+=(-g "$gh_token")
+        cmd_args+=(-o "$out_log")
+
+        # 执行清理脚本
+        if [[ ! -f "del.sh" ]]; then
+          error_msg "找不到清理脚本 del.sh"
+        fi
+
         chmod +x del.sh
-        ./del.sh ${make_command}
+        ./del.sh "${cmd_args[@]}"
