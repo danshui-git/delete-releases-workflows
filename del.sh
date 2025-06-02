@@ -172,13 +172,20 @@ get_releases_list() {
     all_releases_list="${TMP_DIR}/A_all_releases_list.json"
     > "${all_releases_list}"
     
-    # 获取总页数
-    total_pages=$(get_total_pages "releases" "$github_per_page")
-    total_pages=$((total_pages < github_max_page ? total_pages : github_max_page))
-    echo -e "${INFO} 总页数: ${total_pages}"
+    # 获取实际总页数（基于默认每页10个）
+    default_per_page=10
+    actual_total_pages=$(get_total_pages "releases" "$default_per_page")
+    
+    # 计算需要的页数（每页100个，相当于实际页数/10）
+    # 使用ceil除法：(actual_total_pages + 9) / 10
+    total_pages_needed=$(( (actual_total_pages + 9) / 10 ))
+    total_pages_needed=$((total_pages_needed < github_max_page ? total_pages_needed : github_max_page))
+    
+    echo -e "${INFO} 实际总页数: ${actual_total_pages} (Releases实际默认每页10个)"
+    echo -e "${INFO} 程序需要执行的获取页数: ${total_pages_needed} (每页查询${github_per_page}个)"
 
     # 从最后一页开始获取发布列表
-    for (( page=total_pages; page>=1; page-- )); do
+    for (( page=total_pages_needed; page>=1; page-- )); do
         echo -e "${INFO} 正在获取第 ${page}/${total_pages} 页..."
         
         response=$(github_api_request "https://api.github.com/repos/${repo}/releases?per_page=${github_per_page}&page=${page}") || {
@@ -423,12 +430,17 @@ get_workflows_list() {
     all_workflows_list="${TMP_DIR}/A_all_workflows_list.json"
     > "${all_workflows_list}"
     
-    # 计算需要获取的总页数
-    local total_items_needed=$((max_workflows_fetch > 0 ? max_workflows_fetch : 1000))
-    local total_pages_needed=$(( (total_items_needed + github_per_page - 1) / github_per_page ))
+    # 获取实际总页数（基于默认每页25个）
+    default_per_page=25
+    actual_total_pages=$(get_total_pages "actions/runs" "$default_per_page")
+    
+    # 计算需要的页数（每页100个，相当于实际页数/4）
+    # 使用ceil除法：(actual_total_pages + 3) / 4
+    total_pages_needed=$(( (actual_total_pages + 3) / 4 ))
     total_pages_needed=$((total_pages_needed < github_max_page ? total_pages_needed : github_max_page))
     
-    echo -e "${INFO} 需要获取的页数: ${total_pages_needed}"
+    echo -e "${INFO} 实际总页数: ${actual_total_pages} (Workflows实际默认每页25个)"
+    echo -e "${INFO} 程序需要执行的获取页数: ${total_pages_needed} (每页查询${github_per_page}个)"
 
     # 从最后一页开始获取工作流列表
     for (( page=total_pages_needed; page>=1; page-- )); do
