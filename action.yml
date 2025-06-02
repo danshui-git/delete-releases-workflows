@@ -83,7 +83,7 @@ runs:
           echo -e "${INFO} 安装jq..."
           if ! command -v jq &>/dev/null; then
             echo -e "${INFO} Installing jq..."
-            sudo apt-get -qq update && sudo apt-get -qq install -y jq
+            sudo apt-get -qq update && sudo apt-get -qq install -y jq curl
           fi
           
           if ! command -v jq &>/dev/null; then
