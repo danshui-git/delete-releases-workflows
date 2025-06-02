@@ -396,7 +396,7 @@ delete_releases() {
                 continue
             }
                 
-            echo -e "${SUCCESS} (1.7.3) 删除发布 ${count}、${tag_name} (ID: ${release_id}) 成功"
+            echo -e "${SUCCESS} (1.7.3) 删除发布 ${count}、${tag_name} (ID: ${release_id}) 完成"
             
             # 如果启用，删除关联的标签
             if [[ "${delete_tags}" == "true" ]]; then
@@ -407,7 +407,7 @@ delete_releases() {
                     continue
                 }
                 
-                echo -e "${SUCCESS} (1.7.6) 标签 ${tag_name} 删除成功"
+                echo -e "${SUCCESS} (1.7.6) 标签 ${tag_name} 删除完成"
             fi
             
             # 添加删除间隔
@@ -415,7 +415,7 @@ delete_releases() {
             
         done < <(jq -c '.[]' "${all_releases_list}")
         
-        echo -e "${SUCCESS} (1.7.7) 发布删除完成[ ${count}/${total} ]"
+        echo -e "${INFO} (1.7.7) 发布删除完成[ ${count}/${total} ]"
     else
         echo -e "${NOTE} (1.7.8) 没有需要删除的发布，跳过"
     fi
@@ -629,14 +629,14 @@ delete_workflows() {
                 continue
             }
                 
-            echo -e "${SUCCESS} (2.6.3) 删除工作流 ${count}、${workflow_name} (ID: ${workflow_id}) 成功"
+            echo -e "${SUCCESS} (2.6.3) 删除工作流 ${count}、${workflow_name} (ID: ${workflow_id}) 完成"
             
             # 添加删除间隔
             sleep "$api_delay"
             
         done < <(jq -c '.[]' "${all_workflows_list}")
         
-        echo -e "${SUCCESS} (2.6.4) 工作流删除完成[ ${count}/${total} ]"
+        echo -e "${INFO} (2.6.4) 工作流删除完成[ ${count}/${total} ]"
     else
         echo -e "${NOTE} (2.6.5) 没有需要删除的工作流"
     fi
