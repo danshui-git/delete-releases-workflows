@@ -63,6 +63,7 @@ runs:
     - name: Ensure proper jq installation
       shell: bash
       run: |
+        # ......
         INFO="[\033[94m 信息 \033[0m]"
         ERROR="[\033[31m ERROR \033[0m]"
         
@@ -107,6 +108,7 @@ runs:
     - name: Validate inputs and run cleanup
       shell: bash
       run: |
+        # ......
         ERROR="[\033[31m ERROR \033[0m]"
         INFO="[\033[94m 信息 \033[0m]"
         SUCCESS="[\033[92m SUCCESS \033[0m]"
