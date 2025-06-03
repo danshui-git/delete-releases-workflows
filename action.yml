@@ -74,21 +74,21 @@ runs:
 
         install_jq() {
           if command -v jq &>/dev/null; then
-            echo -e "${INFO} 移除旧版jq..." >&3
+            echo -e "${INFO} 移除旧版jq..." 2>/dev/null
             sudo snap remove jq 2>/dev/null || true
             sudo apt-get remove -y jq 2>/dev/null || true
           fi
         
-          echo -e "${INFO} 安装jq..." >&3
+          echo -e "${INFO} 安装jq..." 2>/dev/null
           if ! command -v jq &>/dev/null; then
             sudo apt-get -qq update && sudo apt-get -qq install -y jq curl
           fi
           
           if ! command -v jq &>/dev/null; then
-            echo -e "${ERROR} jq 安装失败" >&3
+            echo -e "${ERROR} jq 安装失败" 2>/dev/null
             return 1
           fi
-          echo -e "${INFO} jq 安装成功 $(which jq)" >&3
+          echo -e "${INFO} jq 安装成功 $(which jq)" 2>/dev/null
           return 0
         }
 
