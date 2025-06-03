@@ -63,36 +63,42 @@ runs:
     - name: Ensure proper jq installation
       shell: bash
       run: |
-        #############################
         INFO="[\033[94m 信息 \033[0m]"
         ERROR="[\033[31m ERROR \033[0m]"
         
+        # 只在非DEBUG模式下静默jq安装过程
         if [ "$DEBUG" != "true" ]; then
+          exec 3>&1 4>&2  # 保存原始stdout和stderr
           exec >/dev/null 2>&1
         fi
 
         install_jq() {
           if command -v jq &>/dev/null; then
-            echo -e "${INFO} 移除旧版jq..."
+            echo -e "${INFO} 移除旧版jq..." >&3
             sudo snap remove jq 2>/dev/null || true
             sudo apt-get remove -y jq 2>/dev/null || true
           fi
         
-          echo -e "${INFO} 安装jq..."
+          echo -e "${INFO} 安装jq..." >&3
           if ! command -v jq &>/dev/null; then
             sudo apt-get -qq update && sudo apt-get -qq install -y jq curl
           fi
           
           if ! command -v jq &>/dev/null; then
-            echo -e "${ERROR} jq 安装失败"
+            echo -e "${ERROR} jq 安装失败" >&3
             return 1
           fi
-          echo -e "${INFO} jq 安装成功 $(which jq)"
+          echo -e "${INFO} jq 安装成功 $(which jq)" >&3
           return 0
         }
 
         if ! install_jq; then
           exit 1
+        fi
+
+        # 恢复原始输出
+        if [ "$DEBUG" != "true" ]; then
+          exec 1>&3 2>&4
         fi
       env:
         DEBIAN_FRONTEND: noninteractive
@@ -101,13 +107,12 @@ runs:
     - name: Validate inputs and run cleanup
       shell: bash
       run: |
-        ##################################
         ERROR="[\033[31m ERROR \033[0m]"
         INFO="[\033[94m 信息 \033[0m]"
         SUCCESS="[\033[92m SUCCESS \033[0m]"
 
         error_msg() {
-          echo -e "${ERROR} $1"
+          echo -e "${ERROR} $1" >&2
           exit 1
         }
 
