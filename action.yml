@@ -63,16 +63,14 @@ runs:
     - name: Ensure proper jq installation
       shell: bash
       run: |
-        # ......
+        #############################
         INFO="[\033[94m 信息 \033[0m]"
         ERROR="[\033[31m ERROR \033[0m]"
         
-        # 根据DEBUG变量决定是否静默
         if [ "$DEBUG" != "true" ]; then
           exec >/dev/null 2>&1
         fi
 
-        # 安装jq
         install_jq() {
           if command -v jq &>/dev/null; then
             echo -e "${INFO} 移除旧版jq..."
@@ -82,7 +80,6 @@ runs:
         
           echo -e "${INFO} 安装jq..."
           if ! command -v jq &>/dev/null; then
-            echo -e "${INFO} Installing jq..."
             sudo apt-get -qq update && sudo apt-get -qq install -y jq curl
           fi
           
@@ -104,127 +101,83 @@ runs:
     - name: Validate inputs and run cleanup
       shell: bash
       run: |
-        # ......
+        ##################################
         ERROR="[\033[31m ERROR \033[0m]"
         INFO="[\033[94m 信息 \033[0m]"
         SUCCESS="[\033[92m SUCCESS \033[0m]"
 
-        # 错误退出函数
         error_msg() {
           echo -e "${ERROR} $1"
           exit 1
         }
 
-        # 切换目录
         cd "${{ github.action_path }}" || {
           error_msg "无法切换到action目录: ${{ github.action_path }}"
         }
 
-        # 清理所有参数的空格或者换行符函数
-        get_clean_input() {
+        validate_input() {
           local var="$1"
-          echo "$var" | tr -d '[:space:]' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+          local param_name="$2"
+          local type="$3"
+          local max="${4:-1000}"
+
+          var=$(echo "$var" | tr -d '[:space:]' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+
+          case "$type" in
+            boolean)
+              [[ ! "$var" =~ ^(true|false)$ ]] && 
+                error_msg "参数 $param_name 的值: '$var' 无效，必须是 'true' 或 'false'"
+              ;;
+            prerelease)
+              [[ ! "$var" =~ ^(true|false|all)$ ]] && 
+                error_msg "参数 $param_name 的值: '$var' 无效，必须是 'true', 'false' 或 'all'"
+              ;;
+            integer)
+              [[ -z "$var" ]] && error_msg "参数 $param_name 不能为空"
+              [[ ! "$var" =~ ^[0-9]+$ ]] && 
+                error_msg "参数 $param_name 的值: '$var' 无效，必须是非负整数"
+              [[ $var -gt $max ]] && 
+                error_msg "参数 $param_name 的值: '$var' 无效，最大值是 $max"
+              ;;
+            keyword)
+              [[ "$var" =~ ^(true|false)$ ]] && var=""
+              ;;
+            repo)
+              local user_pattern='^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$'
+              local repo_pattern='^[a-zA-Z0-9_]([a-zA-Z0-9_.-]*[a-zA-Z0-9_])?$'
+              IFS='/' read -r username reponame <<< "$var"
+              [[ ${#username} -lt 1 || ${#username} -gt 39 || 
+                ${#reponame} -lt 1 || ${#reponame} -gt 100 || 
+                "$reponame" =~ \.git$ ||
+                ! "$username" =~ $user_pattern || 
+                ! "$reponame" =~ $repo_pattern ]] && 
+                error_msg "仓库格式错误: $var"
+              ;;
+            *)
+              error_msg "未知的验证类型: $type"
+              ;;
+          esac
+
+          echo "$var"
         }
 
-        # 验证开关有效性函数
-        validate_boolean() {
-          local var="$1" param_name="$2"
-          if [[ ! "$var" =~ ^(true|false)$ ]]; then
-            error_msg "参数 $param_name 的值: '$var' 无效，必须是 'true' 或 'false'"
-          fi
-        }
-
-        # 验证预发布选项函数
-        validate_prerelease() {
-          local var="$1" param_name="$2"
-          if [[ ! "$var" =~ ^(true|false|all)$ ]]; then
-            error_msg "参数 $param_name 的值: '$var' 无效，必须是 'true', 'false' 或 'all'"
-          fi
-        }
-
-        # 验证关键词函数
-        validate_keyword() {
-          local var="$1" param_name="$2"
-          if [[ "$var" =~ ^(true|false)$ ]]; then
-            declare -g "$param_name"=""
-          fi
-        }
-
-        # 验证数字非负和整数函数
-        validate_non_negative_integer() {
-          local var="$1" param_name="$2" max="${3:-1000}"
-          if [[ -z "$var" ]]; then
-            error_msg "参数 $param_name 不能为空"
-          fi
-          if ! [[ "$var" =~ ^[0-9]+$ ]]; then
-            error_msg "参数 $param_name 的值: '$var' 无效，必须是非负和整数"
-          fi
-          if [[ $var -gt $max ]]; then
-            error_msg "参数 $param_name 的值: '$var' 无效，最大值是 $max"
-          fi
-        }
-
-        # 验证github仓库格式正确性
-        validate_repo_format() {
-          local repo="$1"
-          local user_pattern='^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$'
-          local repo_pattern='^[a-zA-Z0-9_]([a-zA-Z0-9_.-]*[a-zA-Z0-9_])?$'
-          IFS='/' read -r username reponame <<< "$repo"
-          if [[ ${#username} -ge 1 && ${#username} -le 39 && 
-                ${#reponame} -ge 1 && ${#reponame} -le 100 && 
-                ! "$reponame" =~ \.git$ &&
-                "$username" =~ $user_pattern && 
-                "$reponame" =~ $repo_pattern ]]; then
-            return 0  # 格式正确
-          else
-            echo -e "${ERROR} 仓库格式错误: $repo"
-            return 1  # 格式错误
-          fi
-        }
-
-        # 获取并清理输入参数
-        repo=$(get_clean_input "${{ inputs.repo }}")
-        delete_releases=$(get_clean_input "${{ inputs.delete_releases }}")
-        delete_tags=$(get_clean_input "${{ inputs.delete_tags }}")
-        prerelease_option=$(get_clean_input "${{ inputs.prerelease_option }}")
-        releases_keep_latest=$(get_clean_input "${{ inputs.releases_keep_latest }}")
-        releases_keep_keyword=$(get_clean_input "${{ inputs.releases_keep_keyword }}")
-        max_releases_fetch=$(get_clean_input "${{ inputs.max_releases_fetch }}")
-        delete_workflows=$(get_clean_input "${{ inputs.delete_workflows }}")
-        workflows_keep_latest=$(get_clean_input "${{ inputs.workflows_keep_latest }}")
-        workflows_keep_keyword=$(get_clean_input "${{ inputs.workflows_keep_keyword }}")
-        max_workflows_fetch=$(get_clean_input "${{ inputs.max_workflows_fetch }}")
-        out_log=$(get_clean_input "${{ inputs.out_log }}")
+        # 验证并清理输入参数
+        repo=$(validate_input "${{ inputs.repo }}" "repo" "repo")
+        delete_releases=$(validate_input "${{ inputs.delete_releases }}" "delete_releases" "boolean")
+        delete_tags=$(validate_input "${{ inputs.delete_tags }}" "delete_tags" "boolean")
+        prerelease_option=$(validate_input "${{ inputs.prerelease_option }}" "prerelease_option" "prerelease")
+        releases_keep_latest=$(validate_input "${{ inputs.releases_keep_latest }}" "releases_keep_latest" "integer")
+        releases_keep_keyword=$(validate_input "${{ inputs.releases_keep_keyword }}" "releases_keep_keyword" "keyword")
+        max_releases_fetch=$(validate_input "${{ inputs.max_releases_fetch }}" "max_releases_fetch" "integer" 1000)
+        delete_workflows=$(validate_input "${{ inputs.delete_workflows }}" "delete_workflows" "boolean")
+        workflows_keep_latest=$(validate_input "${{ inputs.workflows_keep_latest }}" "workflows_keep_latest" "integer")
+        workflows_keep_keyword=$(validate_input "${{ inputs.workflows_keep_keyword }}" "workflows_keep_keyword" "keyword")
+        max_workflows_fetch=$(validate_input "${{ inputs.max_workflows_fetch }}" "max_workflows_fetch" "integer" 1000)
+        out_log=$(validate_input "${{ inputs.out_log }}" "out_log" "boolean")
         gh_token="${{ inputs.gh_token }}"
 
-        # 验证必需参数
+        # 必需参数验证
         [[ -z "$gh_token" ]] && error_msg "必须提供有效的 GitHub token"
-        [[ -z "$delete_releases" ]] && error_msg "必须设置 delete_releases 参数，且参数必须是 'true' 或 'false'"
-        [[ -z "$delete_workflows" ]] && error_msg "必须设置 delete_workflows 参数，且参数必须是 'true' 或 'false'"
-
-        # 验证仓库格式
-        if ! validate_repo_format "$repo"; then
-          error_msg "提供的仓库名格式不正确"
-        fi
-
-        # 验证参数格式
-        validate_boolean "$delete_releases" "delete_releases"
-        validate_boolean "$delete_tags" "delete_tags"
-        validate_boolean "$delete_workflows" "delete_workflows"
-        validate_boolean "$out_log" "out_log"
-
-        # 验证预发布选项
-        validate_prerelease "$prerelease_option" "prerelease_option"
-
-        # 关键词验证
-        validate_keyword "$releases_keep_keyword" "releases_keep_keyword"
-        validate_keyword "$workflows_keep_keyword" "workflows_keep_keyword"
-
-        # 数字参数验证整数
-        validate_non_negative_integer "$releases_keep_latest" "releases_keep_latest"
-        validate_non_negative_integer "$workflows_keep_latest" "workflows_keep_latest"
-        validate_non_negative_integer "$max_releases_fetch" "max_releases_fetch" 1000
-        validate_non_negative_integer "$max_workflows_fetch" "max_workflows_fetch" 1000
 
         # 验证gh_token有效性
         echo -e "${INFO} 正在验证 GitHub Token..."
@@ -253,9 +206,7 @@ runs:
         cmd_args+=(-o "$out_log")
 
         # 执行清理脚本
-        if [[ ! -f "del.sh" ]]; then
-          error_msg "找不到清理脚本 del.sh"
-        fi
+        [[ ! -f "del.sh" ]] && error_msg "找不到清理脚本 del.sh"
 
         chmod +x del.sh
         ./del.sh "${cmd_args[@]}"
