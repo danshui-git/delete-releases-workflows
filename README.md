@@ -52,8 +52,8 @@ You can configure the deletion settings in the delete.yml file with the followin
 | delete_releases         | [必选项](#) | 设置是否删除 releases 文件（参数：`true`/`false`），必需附加值，没此值会报错退出。 |
 | prerelease_option       | 可选项 | 设置是否区分预发行版本（参数：`all`/`true`/`false`）。`all`表示全部类型，`true`/`false`代表仅删除标记为此类型的 releases 文件。默认为 `all`。 |
 | releases_keep_latest    | 可选项 | 设置保留几个最新的 Releases 版本，设置为 `0` 表示除了设置为关键字之外全部删除，默认保留 `90` 个。 |
+| delete_tags             | 可选项   | 设置是否删除与 Releases 关联的 tags，一般都默认一起删除的（参数：`true`/`false`），默认为 `true`。 |
 | releases_keep_keyword   | 可选项   | 设置需要保留的 Releases 的 tags `关键字`，多个关键字使用 `/` 分割（例如：`book/tool`），默认值 `无`。 |
-| delete_tags             | 可选项   | 设置是否删除与 Releases 关联的 tags（参数：`true`/`false`），默认为 `true`。 |
 | max_releases_fetch   | 可选项   | 一次最多检查多少个releases，进行清理，设置太多的话，清理时间过长，或者会出现超时情况，按100倍数增加，最高可以设置1000（比如100、200、300...800、900、1000），默认值 `200`。 |
 | delete_workflows        | [必选项](#) | 设置是否删除 workflows 运行记录（参数：`true`/`false`），必需附加值，没此值会报错退出。 |
 | workflows_keep_latest      | 可选项 | 设置保留时间靠前的 workflows 记录，设置为 `0` 表示除了设置为关键字之外全部删除。默认为 `90` 个。 |
