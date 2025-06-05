@@ -49,7 +49,7 @@ You can configure the deletion settings in the delete.yml file with the followin
 
 | Key / 选项               | Required   | Description / 说明                       |
 | ----------------------- | ---------- | ---------------------------------------- |
-| delete_releases         | <span style="color: red;">必选项</span> | 设置是否删除 releases 文件（参数：`true`/`false`），必需附加值，没此值会报错退出。 |
+| delete_releases         | <font color="blue">这段文字是蓝色的。</font> | 设置是否删除 releases 文件（参数：`true`/`false`），必需附加值，没此值会报错退出。 |
 | prerelease_option       | 可选项 | 设置是否区分预发行版本（选项：`all`/`true`/`false`）。`all`表示全部类型，`true`/`false`代表仅删除标记为此类型的 releases 文件。默认为 `all`。 |
 | releases_keep_latest    | 可选项 | 设置保留几个最新的 Releases 版本，设置为 `0` 表示全部删除，默认保留 `90` 个。 |
 | releases_keep_keyword   | 可选项   | 设置需要保留的 Releases 的 tags `关键字`，多个关键字使用 `/` 分割（例如：`book/tool`），默认值 `无`。 |
