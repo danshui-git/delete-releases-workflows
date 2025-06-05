@@ -44,7 +44,9 @@
 ## Setting instructions / 设置说明
 
 You can configure the deletion settings in the delete.yml file with the following options:
-
+<link rel="stylesheet" href=".github/styling.css">
+ 
+<span class="red-text">这段文字是红色的。</span>
 您可以在 清理releases和workflows 选项配置：
 
 | Key / 选项               | Required   | Description / 说明                       |
