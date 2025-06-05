@@ -61,7 +61,7 @@ You can configure the deletion settings in the delete.yml file with the followin
 | max_workflows_fetch   | 可选项   | 一次最多检查多少个workflow，进行清理，设置太多的话，清理时间过长，或者会出现超时情况，按100倍数增加，最高可以设置1000（比如100、200、300...800、900、1000），默认值 `200`。 |
 | out_log                 | 可选项   | 设置是否输出详细的 json 日志（参数：`true`/`false`），默认值 `false`，此项一般不需要，当发生程序错误时，调试观察才需要开启的项目 |
 | repo                    | 可选项   | 设置执行操作的 `<owner>/<repo>` ，默认为`当前仓库`。 |
-| gh_token                | [必选项](#) | Set the [GITHUB_TOKEN](https://docs.github.com/en/actions/security-guides/automatic-token-authentication) password for executing the delete operation.<br />设置执行删除操作的 [GITHUB_TOKEN](https://docs.github.com/zh/actions/security-guides/automatic-token-authentication#about-the-github_token-secret) 口令，必需附加值，没此值会报错退出 |
+| gh_token                | [必选项](#) | 设置执行删除操作的 [GITHUB_TOKEN](https://docs.github.com/zh/actions/security-guides/automatic-token-authentication#about-the-github_token-secret) 口令，必需附加值，没此值会报错退出 |
 
 
 ## License / 许可
