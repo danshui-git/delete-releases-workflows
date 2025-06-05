@@ -52,6 +52,7 @@ inputs:
   gh_token:
     description: "GitHub token with appropriate permissions"
     required: true
+    default: ""
   debug:
     description: "Enable debug output"
     required: false
