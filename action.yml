@@ -56,7 +56,7 @@ inputs:
   debug:
     description: "Enable debug output"
     required: false
-    default: "true"
+    default: "false"
 
 runs:
   using: "composite"
